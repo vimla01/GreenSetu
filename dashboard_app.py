@@ -11,6 +11,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import streamlit as st
 from sklearn.linear_model import LinearRegression
+from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -263,14 +264,16 @@ def theme(fig, h=400, xticks=None):
     return fig
 
 YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
 
 # ── DATA ──────────────────────────────────────────────────────────────
 @st.cache_data
 def load():
-    df    = pd.read_csv('mangrove_2020_2025_final.csv').sort_values('year').reset_index(drop=True)
-    urban = pd.read_csv('mangrove_to_urban_2020_2025_final.csv').sort_values('year').reset_index(drop=True)
-    gee   = pd.read_csv('gee_export.csv').drop(columns=['system:index','.geo'], errors='ignore')
-    gee_u = pd.read_csv('mangrove_to_urban_gee_export_v2.csv').drop(columns=['system:index','.geo'], errors='ignore')
+    df    = pd.read_csv(DATA_DIR / 'mangrove_2020_2025_final.csv').sort_values('year').reset_index(drop=True)
+    urban = pd.read_csv(DATA_DIR / 'mangrove_to_urban_2020_2025_final.csv').sort_values('year').reset_index(drop=True)
+    gee   = pd.read_csv(DATA_DIR / 'gee_export.csv').drop(columns=['system:index','.geo'], errors='ignore')
+    gee_u = pd.read_csv(DATA_DIR / 'mangrove_to_urban_gee_export_v2.csv').drop(columns=['system:index','.geo'], errors='ignore')
 
     df['area_ha']         = df['mangrove_area_sq_km'] * 100
     df['carbon_tc']       = df['area_ha'] * 150

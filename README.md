@@ -22,6 +22,36 @@ The project focuses on understanding the environmental impact of rapid urbanizat
 - `scripts/clean_urban_export.py`: cleans the urban growth export into final CSV
 - `data/`: exported and cleaned datasets
 
+## How to Run
+This project includes a Streamlit dashboard in `dashboard_app.py`.
+
+### 1. Create and activate a virtual environment
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 2. Install dependencies
+```bash
+pip install streamlit pandas numpy plotly scikit-learn
+```
+
+### 3. Run the dashboard
+```bash
+python3 -m streamlit run dashboard_app.py
+```
+
+### 4. Open it in your browser
+After Streamlit starts, open the local URL shown in the terminal. It is usually:
+
+```text
+http://localhost:8501
+```
+
+### Notes
+- The dashboard reads its datasets from the `data/` folder automatically.
+- Run the command from the project root directory.
+
 ## SDG Alignment
 - SDG 11: Sustainable Cities & Communities
 - SDG 13: Climate Action
