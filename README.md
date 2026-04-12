@@ -13,14 +13,28 @@ The project focuses on understanding the environmental impact of rapid urbanizat
 - Government & environmental reports
 
 ## Project Structure
-- `gee/mumbai_mangrove_analysis.js`: current Earth Engine script for Mumbai region analysis
-- `gee/mumbai_mangrove_to_urban_analysis.js`: Earth Engine script for mangrove areas converted to urban land
-- `gee/mumbai_urban_growth_analysis.js`: optional Earth Engine script for total year-wise urban development extraction
-- `gee/thane_creek_mangrove_2020_2025.js`: backup asset-based script for a narrower AOI workflow
-- `scripts/clean_mangrove_export.py`: cleans Earth Engine export into final CSV
-- `scripts/clean_mangrove_to_urban_export.py`: cleans the mangrove-to-urban export into final CSV
-- `scripts/clean_urban_export.py`: cleans the urban growth export into final CSV
-- `data/`: exported and cleaned datasets
+```
+GreenSetu/
+├── dashboard_app.py                 # Main Streamlit dashboard application
+├── graphs_plotty.ipynb              # Jupyter notebook for plotting graphs
+├── Mumbai_NDVI_CSV.csv              # NDVI data for Mumbai
+├── README.md                        # Project documentation
+├── satellite data.qgz               # QGIS project file for satellite data
+├── data/                            # Directory for datasets
+│   ├── gee_export.csv               # General Earth Engine export
+│   ├── mangrove_2020_2025_final.csv # Final cleaned mangrove data (2020-2025)
+│   ├── mangrove_to_urban_2020_2025_final.csv # Mangrove to urban conversion data
+│   └── mangrove_to_urban_gee_export_v2.csv # Version 2 of mangrove to urban export
+├── gee/                             # Google Earth Engine scripts
+│   ├── mumbai_mangrove_analysis.js  # Script for Mumbai mangrove analysis
+│   ├── mumbai_mangrove_to_urban_analysis.js # Script for mangrove to urban analysis
+│   ├── mumbai_urban_growth_analysis.js # Script for urban growth analysis
+│   └── thane_creek_mangrove_2020_2025.js # Script for Thane Creek mangrove analysis
+└── scripts/                         # Python scripts for data cleaning
+    ├── clean_mangrove_export.py     # Script to clean mangrove export data
+    ├── clean_mangrove_to_urban_export.py # Script to clean mangrove to urban export
+    └── clean_urban_export.py        # Script to clean urban export data
+```
 
 ## How to Run
 This project includes a Streamlit dashboard in `dashboard_app.py`.
