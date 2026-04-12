@@ -8,56 +8,46 @@ __LEAFLET_CUSTOM_CSS__
   <div class="leaflet-heatmap-hero">
     <div class="leaflet-hero-left">
       <div class="leaflet-kicker">Spatial Intelligence</div>
-      <div class="leaflet-heatmap-title">Mumbai Coastal NDVI Intensity</div>
-      <div class="leaflet-heatmap-sub">Interactive hotspot view of vegetation signal across the same Mumbai region used in this dashboard.</div>
+      <div class="leaflet-heatmap-title">Mumbai Mangrove Loss Map</div>
+      <div class="leaflet-heatmap-sub">NDVI coordinates are rendered as a heatmap by default, while real mangrove geometry is used automatically when available.</div>
     </div>
     <div class="leaflet-hero-stats">
       <div class="leaflet-stat">
-        <span>Sampled Points</span>
+        <span id="hm-count-label">Mapped Features</span>
         <strong id="hm-points">--</strong>
+      </div>
+      <div class="leaflet-stat">
+        <span>Selected Year</span>
+        <strong id="hm-zones">--</strong>
       </div>
       <div class="leaflet-stat">
         <span>Region Span</span>
         <strong id="hm-span">--</strong>
       </div>
       <div class="leaflet-stat">
-        <span>Layer Mode</span>
+        <span>View Mode</span>
         <strong id="hm-mode">--</strong>
       </div>
     </div>
   </div>
 
-  <div class="leaflet-toolbar">
-    <label>
-      Basemap
-      <select id="hm-basemap">
-        <option value="Light">Light</option>
-        <option value="Street">Street</option>
-        <option value="Satellite">Satellite</option>
-      </select>
-    </label>
-    <label>
-      Heat Radius
-      <input id="hm-radius" type="range" min="12" max="38" value="22" step="1" />
-      <span id="hm-radius-value">22</span>
-    </label>
-    <label>
-      Heat Opacity
-      <input id="hm-opacity" type="range" min="25" max="95" value="78" step="1" />
-      <span id="hm-opacity-value">78%</span>
-    </label>
+  <div class="leaflet-map-meta-wrap">
     <div id="leaflet-heatmap-meta" class="leaflet-heatmap-meta"></div>
   </div>
 
   <div class="leaflet-map-stage">
+    <div class="leaflet-view-switch" role="group" aria-label="Basemap toggle">
+      <button id="hm-view-map" type="button" class="is-active">Map</button>
+      <button id="hm-view-satellite" type="button">Satellite</button>
+    </div>
     <div id="leaflet-ndvi-heatmap"></div>
     <div id="hm-layer-status" class="leaflet-map-badge">Loading map...</div>
   </div>
 
   <div class="leaflet-heatmap-legend" aria-hidden="true">
-    <span>Low vegetation signal</span>
+    <span id="hm-legend-left">Mangrove extent</span>
     <div class="leaflet-heatmap-gradient"></div>
-    <span>High vegetation signal</span>
+    <span id="hm-legend-right">Selected layer</span>
   </div>
 </div>
 
@@ -67,6 +57,8 @@ __LEAFLET_CUSTOM_CSS__
 window.__MUMBAI_HEATMAP_POINTS__ = __HEATMAP_POINTS__;
 window.__MUMBAI_HEATMAP_CENTER__ = __HEATMAP_CENTER__;
 window.__MUMBAI_HEATMAP_BOUNDS__ = __HEATMAP_BOUNDS__;
+window.__MUMBAI_MAP_FEATURES__ = __MAP_FEATURES__;
+window.__MUMBAI_MAP_METADATA__ = __MAP_METADATA__;
 </script>
 <script>
 __LEAFLET_CUSTOM_JS__

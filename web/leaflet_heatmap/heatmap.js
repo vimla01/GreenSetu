@@ -1,41 +1,26 @@
 (function () {
-  const points = window.__MUMBAI_HEATMAP_POINTS__ || [];
+  const rawPoints = window.__MUMBAI_HEATMAP_POINTS__ || [];
+  const rawFeatureCollection = window.__MUMBAI_MAP_FEATURES__ || { type: "FeatureCollection", features: [] };
+  const metadata = window.__MUMBAI_MAP_METADATA__ || {};
   const center = window.__MUMBAI_HEATMAP_CENTER__ || { lat: 19.0677, lng: 72.9177 };
   const boundsData = window.__MUMBAI_HEATMAP_BOUNDS__;
 
   const mapNode = document.getElementById("leaflet-ndvi-heatmap");
   const metaNode = document.getElementById("leaflet-heatmap-meta");
-  const pointsNode = document.getElementById("hm-points");
+  const countLabelNode = document.getElementById("hm-count-label");
+  const countNode = document.getElementById("hm-points");
+  const yearNode = document.getElementById("hm-zones");
   const spanNode = document.getElementById("hm-span");
   const modeNode = document.getElementById("hm-mode");
   const layerStatusNode = document.getElementById("hm-layer-status");
+  const legendLeftNode = document.getElementById("hm-legend-left");
+  const legendRightNode = document.getElementById("hm-legend-right");
 
-  const basemapSelect = document.getElementById("hm-basemap");
-  const radiusInput = document.getElementById("hm-radius");
-  const opacityInput = document.getElementById("hm-opacity");
-  const radiusValueNode = document.getElementById("hm-radius-value");
-  const opacityValueNode = document.getElementById("hm-opacity-value");
+  const mapButton = document.getElementById("hm-view-map");
+  const satelliteButton = document.getElementById("hm-view-satellite");
 
   if (!mapNode) {
     return;
-  }
-
-  function fail(message) {
-    mapNode.innerHTML = '<div class="leaflet-heatmap-empty">' + message + "</div>";
-    setStatus("Map unavailable");
-    setNodeText(modeNode, "Unavailable");
-  }
-
-  function setMeta(text) {
-    if (metaNode) {
-      metaNode.textContent = text;
-    }
-  }
-
-  function setStatus(text) {
-    if (layerStatusNode) {
-      layerStatusNode.textContent = text;
-    }
   }
 
   function setNodeText(node, text) {
@@ -44,9 +29,18 @@
     }
   }
 
-  function isContainerReady() {
-    const rect = mapNode.getBoundingClientRect();
-    return rect.width > 120 && rect.height > 120;
+  function setMeta(text) {
+    setNodeText(metaNode, text);
+  }
+
+  function setStatus(text) {
+    setNodeText(layerStatusNode, text);
+  }
+
+  function fail(message) {
+    mapNode.innerHTML = '<div class="leaflet-heatmap-empty">' + message + "</div>";
+    setStatus("Map unavailable");
+    setNodeText(modeNode, "Unavailable");
   }
 
   function finiteNumber(value, fallback) {
@@ -61,23 +55,54 @@
     return Math.abs(delta) * 111.32 * Math.cos((lat * Math.PI) / 180);
   }
 
-  function updateTopStats(validPoints) {
-    setNodeText(pointsNode, validPoints.length.toLocaleString());
+  function updateSpan(bounds) {
+    if (!bounds) {
+      setNodeText(spanNode, "Mumbai region");
+      return;
+    }
+
+    const south = bounds.getSouth ? bounds.getSouth() : boundsData && boundsData.south;
+    const north = bounds.getNorth ? bounds.getNorth() : boundsData && boundsData.north;
+    const west = bounds.getWest ? bounds.getWest() : boundsData && boundsData.west;
+    const east = bounds.getEast ? bounds.getEast() : boundsData && boundsData.east;
 
     if (
-      boundsData &&
-      Number.isFinite(boundsData.south) &&
-      Number.isFinite(boundsData.north) &&
-      Number.isFinite(boundsData.west) &&
-      Number.isFinite(boundsData.east)
+      !Number.isFinite(south) ||
+      !Number.isFinite(north) ||
+      !Number.isFinite(west) ||
+      !Number.isFinite(east)
     ) {
-      const midLat = (boundsData.south + boundsData.north) / 2;
-      const latSpan = kmFromLatDelta(boundsData.north - boundsData.south);
-      const lonSpan = kmFromLonDelta(boundsData.east - boundsData.west, midLat);
-      setNodeText(spanNode, latSpan.toFixed(1) + " x " + lonSpan.toFixed(1) + " km");
-    } else {
       setNodeText(spanNode, "Mumbai region");
+      return;
     }
+
+    const midLat = (south + north) / 2;
+    const latSpan = kmFromLatDelta(north - south);
+    const lonSpan = kmFromLonDelta(east - west, midLat);
+    setNodeText(spanNode, latSpan.toFixed(1) + " x " + lonSpan.toFixed(1) + " km");
+  }
+
+  function updateTopStats(count, countLabel) {
+    setNodeText(countLabelNode, countLabel);
+    setNodeText(countNode, count.toLocaleString());
+    setNodeText(yearNode, metadata.selectedYear ? String(metadata.selectedYear) : "All");
+  }
+
+  function setLegendMode(mode) {
+    if (mode === "real_geometry") {
+      setNodeText(legendLeftNode, "Mangrove");
+      setNodeText(legendRightNode, "Extent");
+      return;
+    }
+
+    if (mode === "ndvi_heatmap") {
+      setNodeText(legendLeftNode, "Low loss");
+      setNodeText(legendRightNode, "High loss");
+      return;
+    }
+
+    setNodeText(legendLeftNode, "Low intensity");
+    setNodeText(legendRightNode, "High intensity");
   }
 
   function clearExistingMap() {
@@ -97,98 +122,137 @@
     mapNode.innerHTML = "";
   }
 
-  function updateSliderLabels() {
-    if (radiusInput) {
-      setNodeText(radiusValueNode, String(radiusInput.value));
+  function setActiveView(viewName) {
+    if (mapButton) {
+      mapButton.classList.toggle("is-active", viewName === "Map");
     }
-    if (opacityInput) {
-      setNodeText(opacityValueNode, String(opacityInput.value) + "%");
+    if (satelliteButton) {
+      satelliteButton.classList.toggle("is-active", viewName === "Satellite");
     }
+    setNodeText(modeNode, viewName);
   }
 
-  function normalizePoints(rawPoints) {
-    if (!Array.isArray(rawPoints)) {
+  function normalizeFeatureCollection(rawData) {
+    let features = [];
+    if (rawData && rawData.type === "FeatureCollection" && Array.isArray(rawData.features)) {
+      features = rawData.features;
+    } else if (rawData && rawData.type === "Feature") {
+      features = [rawData];
+    } else if (Array.isArray(rawData)) {
+      features = rawData;
+    }
+
+    return {
+      type: "FeatureCollection",
+      features: features.filter(function (feature) {
+        return feature && feature.geometry;
+      })
+    };
+  }
+
+  function normalizePoints(rawData) {
+    if (!Array.isArray(rawData)) {
       return [];
     }
 
-    const valid = rawPoints.filter(function (p) {
-      return p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.weight);
+    const valid = rawData.filter(function (point) {
+      return (
+        point &&
+        Number.isFinite(point.lat) &&
+        Number.isFinite(point.lng) &&
+        Number.isFinite(point.weight)
+      );
     });
 
     if (!valid.length) {
       return [];
     }
 
-    const maxWeight = valid.reduce(function (mx, p) {
-      return p.weight > mx ? p.weight : mx;
+    const maxWeight = valid.reduce(function (maxValue, point) {
+      return point.weight > maxValue ? point.weight : maxValue;
     }, 0.01);
 
-    return valid.map(function (p) {
-      const normalized = p.weight / maxWeight;
+    return valid.map(function (point) {
+      const normalized = point.weight / maxWeight;
       return {
-        lat: p.lat,
-        lng: p.lng,
-        weight: Math.min(Math.max(normalized, 0.04), 1)
+        lat: point.lat,
+        lng: point.lng,
+        weight: Math.min(Math.max(normalized, 0.12), 1),
+        ndvi: Number.isFinite(point.ndvi) ? point.ndvi : point.weight,
+        zone: point.zone || "Mangrove zone"
       };
     });
   }
 
-  function getThemeGradient() {
+  function getPointColor(weight) {
+    if (weight >= 0.82) {
+      return "#0b5d44";
+    }
+    if (weight >= 0.62) {
+      return "#1f875e";
+    }
+    if (weight >= 0.42) {
+      return "#35a96f";
+    }
+    if (weight >= 0.24) {
+      return "#63c889";
+    }
+    return "#94df9f";
+  }
+
+  function getLossGradient() {
     return {
-      0.08: "#dff4e8",
-      0.28: "#8ed9ad",
-      0.52: "#34b177",
-      0.76: "#e29f39",
-      1.0: "#c0392b"
+      0.12: "#0f9d58",
+      0.35: "#8bc34a",
+      0.58: "#f4c542",
+      0.78: "#f08c2e",
+      1.0: "#d63b31"
     };
   }
 
   function getBaseLayers() {
     return {
-      Light: L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        subdomains: "abcd",
-        maxZoom: 20,
-        attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
-      }),
-      Street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
-      }),
-      Satellite: L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        {
-          maxZoom: 19,
-          attribution: "Tiles &copy; Esri"
-        }
-      )
+      Map: [
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+          subdomains: "abcd",
+          maxZoom: 20,
+          attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
+        })
+      ],
+      Satellite: [
+        L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          {
+            maxZoom: 19,
+            attribution: "Tiles &copy; Esri"
+          }
+        ),
+        L.tileLayer(
+          "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+          {
+            maxZoom: 19,
+            attribution: "Labels &copy; Esri"
+          }
+        )
+      ]
     };
   }
 
-  function applyBoundary(map) {
+  function getBoundsFromPayload() {
     if (
-      !boundsData ||
-      !Number.isFinite(boundsData.south) ||
-      !Number.isFinite(boundsData.west) ||
-      !Number.isFinite(boundsData.north) ||
-      !Number.isFinite(boundsData.east)
+      boundsData &&
+      Number.isFinite(boundsData.south) &&
+      Number.isFinite(boundsData.west) &&
+      Number.isFinite(boundsData.north) &&
+      Number.isFinite(boundsData.east)
     ) {
-      return null;
+      return L.latLngBounds(
+        [boundsData.south, boundsData.west],
+        [boundsData.north, boundsData.east]
+      );
     }
 
-    const bounds = L.latLngBounds(
-      [boundsData.south, boundsData.west],
-      [boundsData.north, boundsData.east]
-    );
-
-    map.fitBounds(bounds.pad(0.03));
-
-    return L.rectangle(bounds, {
-      color: "#1f6c44",
-      weight: 1,
-      opacity: 0.9,
-      fill: false,
-      dashArray: "6 5"
-    }).addTo(map);
+    return null;
   }
 
   function defaultCenterView(map) {
@@ -198,45 +262,141 @@
     );
   }
 
-  function addCenterMarker(map) {
-    L.circleMarker(
-      [finiteNumber(center.lat, 19.0677), finiteNumber(center.lng, 72.9177)],
-      {
-        radius: 5,
-        color: "#ffffff",
-        fillColor: "#1b5e35",
-        fillOpacity: 1,
-        weight: 2
-      }
-    )
-      .addTo(map)
-      .bindTooltip("Mumbai coastal center", { direction: "top", offset: [0, -6] });
+  function buildTooltipHtml(properties, defaultTitle) {
+    const props = properties || {};
+    const lines = ["<strong>" + defaultTitle + "</strong>"];
+
+    if (props.year !== undefined) {
+      lines.push("Year: " + props.year);
+    }
+    if (props.name) {
+      lines.push("Name: " + props.name);
+    }
+    if (props.area_sq_km !== undefined) {
+      lines.push("Area: " + Number(props.area_sq_km).toFixed(3) + " sq km");
+    }
+    if (props.mangrove_area_sq_km !== undefined) {
+      lines.push("Area: " + Number(props.mangrove_area_sq_km).toFixed(3) + " sq km");
+    }
+    if (props.zone) {
+      lines.push("Zone: " + props.zone);
+    }
+
+    return lines.join("<br>");
   }
 
-  function addPointFallback(map, validPoints) {
-    const markerSample = validPoints.slice(0, 800);
-    markerSample.forEach(function (p) {
-      L.circleMarker([p.lat, p.lng], {
-        radius: 1.8,
-        color: "#2ea86f",
-        fillColor: "#2ea86f",
-        fillOpacity: 0.3,
-        weight: 0
-      }).addTo(map);
+  function addMangroveGeometry(map, featureCollection) {
+    return L.geoJSON(featureCollection, {
+      style: function () {
+        return {
+          color: "#0c6548",
+          weight: 1.2,
+          opacity: 0.95,
+          fillColor: "#27a36b",
+          fillOpacity: 0.48
+        };
+      },
+      pointToLayer: function (feature, latlng) {
+        return L.circleMarker(latlng, {
+          radius: 5.5,
+          color: "#ffffff",
+          weight: 1.2,
+          fillColor: "#1f875e",
+          fillOpacity: 0.92,
+          opacity: 0.92
+        });
+      },
+      onEachFeature: function (feature, layer) {
+        layer.bindTooltip(
+          buildTooltipHtml(feature.properties, "Mangrove feature"),
+          {
+            direction: "top",
+            offset: [0, -2],
+            opacity: 0.96
+          }
+        );
+      }
+    }).addTo(map);
+  }
+
+  function addMangrovePoints(map, points) {
+    return L.layerGroup(
+      points.map(function (point) {
+        const radius = 3 + point.weight * 4.5;
+        const color = getPointColor(point.weight);
+        return L.circleMarker([point.lat, point.lng], {
+          radius: radius,
+          color: "#ffffff",
+          weight: 1.1,
+          fillColor: color,
+          fillOpacity: 0.88,
+          opacity: 0.92
+        }).bindTooltip(
+          "<strong>" +
+            point.zone +
+            "</strong><br>NDVI: " +
+            point.ndvi.toFixed(3),
+          {
+            direction: "top",
+            offset: [0, -2],
+            opacity: 0.96
+          }
+        );
+      })
+    ).addTo(map);
+  }
+
+  function addNdviLossHeat(map, points) {
+    if (typeof L.heatLayer !== "function") {
+      return addMangrovePoints(map, points);
+    }
+
+    const heatData = points.map(function (point) {
+      return [point.lat, point.lng, point.weight];
     });
+
+    return L.heatLayer(heatData, {
+      radius: 16,
+      blur: 14,
+      maxZoom: 16,
+      minOpacity: 0.32,
+      gradient: getLossGradient()
+    }).addTo(map);
+  }
+
+  function toggleBaseLayer(map, baseLayers, nextBase, activeBase) {
+    if (!baseLayers[nextBase]) {
+      return activeBase;
+    }
+
+    if (baseLayers[activeBase]) {
+      baseLayers[activeBase].forEach(function (layer) {
+        if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      });
+    }
+
+    baseLayers[nextBase].forEach(function (layer) {
+      layer.addTo(map);
+    });
+
+    setActiveView(nextBase);
+    return nextBase;
   }
 
   function renderMap() {
-    const validPoints = normalizePoints(points);
-    if (!validPoints.length) {
-      fail("No NDVI points available for this heatmap.");
+    const featureCollection = normalizeFeatureCollection(rawFeatureCollection);
+    const validPoints = normalizePoints(rawPoints);
+    const hasRealGeometry = featureCollection.features.length > 0;
+    const dataMode = metadata.dataMode || (hasRealGeometry ? "real_geometry" : "ndvi_heatmap");
+
+    if (!hasRealGeometry && !validPoints.length) {
+      fail("No mangrove geometry or preview points are available for this map.");
       return;
     }
 
-    updateTopStats(validPoints);
-    updateSliderLabels();
     setStatus("Preparing layers");
-
     clearExistingMap();
 
     const map = L.map("leaflet-ndvi-heatmap", {
@@ -250,18 +410,21 @@
     map.zoomControl.setPosition("topright");
 
     const baseLayers = getBaseLayers();
-    let activeBase = "Light";
-    baseLayers[activeBase].addTo(map);
-    if (basemapSelect) {
-      basemapSelect.value = activeBase;
+    let activeBase = "Map";
+    activeBase = toggleBaseLayer(map, baseLayers, activeBase, null);
+    defaultCenterView(map);
+
+    const payloadBounds = getBoundsFromPayload();
+    let displayLayer = null;
+    if (hasRealGeometry) {
+      displayLayer = addMangroveGeometry(map, featureCollection);
+    } else if (dataMode !== "ndvi_heatmap") {
+      displayLayer = addMangrovePoints(map, validPoints);
     }
 
-    const boundary = applyBoundary(map);
-    if (!boundary) {
-      defaultCenterView(map);
-    }
+    const initialLayerBounds = displayLayer && displayLayer.getBounds ? displayLayer.getBounds() : null;
+    const finalBounds = payloadBounds || (initialLayerBounds && initialLayerBounds.isValid && initialLayerBounds.isValid() ? initialLayerBounds : null);
 
-    addCenterMarker(map);
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
 
     map.invalidateSize(true);
@@ -272,118 +435,130 @@
       map.invalidateSize(true);
     }, 240);
 
-    let heatLayer = null;
+    if (hasRealGeometry) {
+      updateTopStats(featureCollection.features.length, "Mapped Features");
+      setLegendMode("real_geometry");
+      setMeta(
+        "Showing real mangrove geometry for " +
+          (metadata.selectedYear || "the selected year") +
+          " from " +
+          (metadata.sourceName || "local geometry file") +
+          "."
+      );
+      setStatus("Real geometry active");
+    } else if (dataMode === "ndvi_heatmap") {
+      updateTopStats(validPoints.length, "NDVI Samples");
+      setLegendMode("ndvi_heatmap");
+      setMeta(
+        "Using all coordinates from " +
+          (metadata.sourceName || "Mumbai_NDVI_CSV.csv") +
+          " as a mangrove loss heatmap. Red means lower NDVI and likely higher vegetation loss."
+      );
+      setStatus("Loss heat active");
+    } else {
+      updateTopStats(validPoints.length, "Preview Points");
+      setLegendMode("approximate_points");
+      setMeta(
+        "Showing approximate coastal preview points from " +
+          (metadata.sourceName || "NDVI samples") +
+          "."
+      );
+      setStatus("Approximate preview");
+    }
 
-    const drawHeat = function () {
-      if (typeof L.heatLayer !== "function") {
-        addPointFallback(map, validPoints);
-        setMeta(
-          "Leaflet heat plugin unavailable, so point-density fallback is displayed for " +
-            validPoints.length +
-            " NDVI points."
-        );
-        setNodeText(modeNode, "Point Fallback");
-        setStatus("Fallback mode");
-        return;
+    const tryAttachHeatLayer = function () {
+      if (displayLayer || hasRealGeometry || dataMode !== "ndvi_heatmap") {
+        return true;
+      }
+
+      const rect = mapNode.getBoundingClientRect();
+      if (rect.width <= 120 || rect.height <= 120) {
+        return false;
       }
 
       try {
-        const heatData = validPoints.map(function (p) {
-          return [p.lat, p.lng, p.weight];
-        });
-
-        const radius = radiusInput ? Number(radiusInput.value) : 22;
-        const opacity = opacityInput ? Number(opacityInput.value) / 100 : 0.78;
-
-        if (heatLayer) {
-          map.removeLayer(heatLayer);
-        }
-
-        heatLayer = L.heatLayer(heatData, {
-          radius: radius,
-          blur: Math.max(12, Math.round(radius * 0.8)),
-          minOpacity: opacity,
-          maxZoom: 14,
-          gradient: getThemeGradient()
-        }).addTo(map);
-
-        setMeta(
-          "Rendered " +
-            validPoints.length +
-            " NDVI points using Leaflet heat layer. Region fit is based on Mumbai dataset bounds."
-        );
-        setNodeText(modeNode, "Heat Layer");
-        setStatus("Heat layer active");
+        displayLayer = addNdviLossHeat(map, validPoints);
       } catch (error) {
-        addPointFallback(map, validPoints);
+        displayLayer = addMangrovePoints(map, validPoints);
         setMeta(
-          "Heat layer fallback active due to render timing (" +
-            (error && error.message ? error.message : "unknown error") +
-            "). Showing point-density map for " +
-            validPoints.length +
-            " NDVI points."
+          "Heat layer could not initialize cleanly, so point fallback is shown from " +
+            (metadata.sourceName || "Mumbai_NDVI_CSV.csv") +
+            "."
         );
-        setNodeText(modeNode, "Point Fallback");
-        setStatus("Fallback mode");
+        setStatus("Point fallback");
       }
+
+      return true;
     };
 
-    const renderHeatWhenReady = function (attempt) {
+    const finalizeLayoutWhenReady = function (attempt) {
       const size = map.getSize ? map.getSize() : { x: 0, y: 0 };
       if (size.x > 120 && size.y > 120) {
-        drawHeat();
+        tryAttachHeatLayer();
+
+        if (finalBounds) {
+          map.fitBounds(finalBounds.pad(hasRealGeometry ? 0.04 : 0.09));
+          updateSpan(finalBounds);
+        } else {
+          defaultCenterView(map);
+          updateSpan(null);
+        }
         return;
       }
 
-      if (attempt > 40) {
-        addPointFallback(map, validPoints);
-        setMeta(
-          "Heat layer delayed due layout timing; showing point-density map for " +
-            validPoints.length +
-            " NDVI points."
-        );
-        setNodeText(modeNode, "Point Fallback");
-        setStatus("Delayed fallback");
+      if (attempt > 60) {
+        tryAttachHeatLayer();
+        if (finalBounds) {
+          updateSpan(finalBounds);
+        } else {
+          updateSpan(null);
+        }
+        setStatus("Map ready");
         return;
       }
 
       setTimeout(function () {
         map.invalidateSize(true);
-        renderHeatWhenReady(attempt + 1);
+        finalizeLayoutWhenReady(attempt + 1);
       }, 80);
     };
 
-    if (basemapSelect) {
-      basemapSelect.onchange = function () {
-        const selected = basemapSelect.value;
-        if (selected === activeBase || !baseLayers[selected]) {
+    if (mapButton) {
+      mapButton.onclick = function () {
+        if (activeBase === "Map") {
           return;
         }
-        map.removeLayer(baseLayers[activeBase]);
-        baseLayers[selected].addTo(map);
-        activeBase = selected;
+        activeBase = toggleBaseLayer(map, baseLayers, "Map", activeBase);
       };
     }
 
-    if (radiusInput) {
-      radiusInput.oninput = function () {
-        updateSliderLabels();
-        drawHeat();
+    if (satelliteButton) {
+      satelliteButton.onclick = function () {
+        if (activeBase === "Satellite") {
+          return;
+        }
+        activeBase = toggleBaseLayer(map, baseLayers, "Satellite", activeBase);
       };
     }
 
-    if (opacityInput) {
-      opacityInput.oninput = function () {
-        updateSliderLabels();
-        drawHeat();
-      };
+    if (!hasRealGeometry && dataMode === "ndvi_heatmap" && typeof ResizeObserver === "function") {
+      const resizeObserver = new ResizeObserver(function () {
+        if (tryAttachHeatLayer()) {
+          resizeObserver.disconnect();
+        }
+      });
+      resizeObserver.observe(mapNode);
     }
 
-    renderHeatWhenReady(0);
+    setTimeout(function () {
+      tryAttachHeatLayer();
+    }, 500);
+
+    finalizeLayoutWhenReady(0);
   }
 
   function waitForLeafletAndContainer(attempt) {
-    if (window.L && isContainerReady()) {
+    if (window.L) {
       renderMap();
       return;
     }
@@ -391,8 +566,6 @@
     if (attempt > 130) {
       if (!window.L) {
         fail("Leaflet library could not be loaded. Check internet access for CDN resources.");
-      } else {
-        fail("Heatmap container did not receive layout size. Please switch tabs once and retry.");
       }
       return;
     }
@@ -405,6 +578,6 @@
   try {
     waitForLeafletAndContainer(0);
   } catch (error) {
-    fail("Leaflet heatmap error: " + (error && error.message ? error.message : "unknown"));
+    fail("Leaflet mangrove map error: " + (error && error.message ? error.message : "unknown"));
   }
 })();

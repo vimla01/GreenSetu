@@ -269,6 +269,19 @@ YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 LEAFLET_HEATMAP_DIR = BASE_DIR / "web" / "leaflet_heatmap"
+REAL_MANGROVE_GEOMETRY_FILES = [
+    DATA_DIR / "mumbai_mangrove_geometry.geojson",
+    DATA_DIR / "mumbai_mangrove_geometry.json",
+    DATA_DIR / "mumbai_mangrove_geometry.csv",
+]
+MANGROVE_NDVI_THRESHOLD = 0.32
+MANGROVE_FOCUS_ZONES = [
+    {"name": "Malad-Gorai", "south": 19.12, "north": 19.22, "west": 72.76, "east": 72.87},
+    {"name": "Mahim-Mithi", "south": 19.02, "north": 19.08, "west": 72.82, "east": 72.87},
+    {"name": "Mahul-Sewri", "south": 19.00, "north": 19.06, "west": 72.90, "east": 72.98},
+    {"name": "Thane Creek", "south": 19.08, "north": 19.20, "west": 72.96, "east": 73.05},
+    {"name": "Vashi-Panvel", "south": 18.99, "north": 19.08, "west": 73.00, "east": 73.09},
+]
 
 # ── DATA ──────────────────────────────────────────────────────────────
 @st.cache_data
@@ -309,14 +322,227 @@ def load():
 df, urban, gee, gee_u, pred = load()
 
 
+def coerce_year(value):
+    if pd.isna(value):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def iter_lon_lat_pairs(coords):
+    if isinstance(coords, (list, tuple)):
+        if len(coords) >= 2 and all(isinstance(v, (int, float)) for v in coords[:2]):
+            yield float(coords[0]), float(coords[1])
+        else:
+            for item in coords:
+                yield from iter_lon_lat_pairs(item)
+
+
+def iter_geometry_lon_lat_pairs(geometry):
+    if not geometry:
+        return
+
+    geometry_type = geometry.get('type')
+    if geometry_type == 'GeometryCollection':
+        for item in geometry.get('geometries', []):
+            yield from iter_geometry_lon_lat_pairs(item)
+        return
+
+    yield from iter_lon_lat_pairs(geometry.get('coordinates', []))
+
+
+def feature_year(feature):
+    props = feature.get('properties') or {}
+    for key in ('year', 'Year'):
+        if key in props:
+            return coerce_year(props.get(key))
+    return None
+
+
+def build_bounds_and_center_from_features(features):
+    coords = []
+    for feature in features:
+        coords.extend(iter_geometry_lon_lat_pairs(feature.get('geometry')))
+
+    if not coords:
+        return None, None
+
+    lngs = [lon for lon, _ in coords]
+    lats = [lat for _, lat in coords]
+    bounds = {
+        'south': float(min(lats)),
+        'west': float(min(lngs)),
+        'north': float(max(lats)),
+        'east': float(max(lngs)),
+    }
+    center = {
+        'lat': float(np.mean(lats)),
+        'lng': float(np.mean(lngs)),
+    }
+    return center, bounds
+
+
+def normalize_feature_collection(raw_data):
+    if not isinstance(raw_data, dict):
+        return {'type': 'FeatureCollection', 'features': []}
+
+    if raw_data.get('type') == 'FeatureCollection':
+        features = raw_data.get('features', [])
+    elif raw_data.get('type') == 'Feature':
+        features = [raw_data]
+    else:
+        features = []
+
+    clean_features = []
+    for feature in features:
+        if not isinstance(feature, dict):
+            continue
+        geometry = feature.get('geometry')
+        if not geometry:
+            continue
+        clean_features.append({
+            'type': 'Feature',
+            'geometry': geometry,
+            'properties': feature.get('properties') or {},
+        })
+
+    return {'type': 'FeatureCollection', 'features': clean_features}
+
+
+def load_feature_collection_from_csv(path):
+    rows = pd.read_csv(path).to_dict(orient='records')
+    features = []
+
+    for row in rows:
+        geo_blob = row.pop('.geo', None)
+        row.pop('system:index', None)
+        if pd.isna(geo_blob):
+            continue
+
+        try:
+            geometry = json.loads(geo_blob)
+        except (TypeError, json.JSONDecodeError):
+            continue
+
+        properties = {}
+        for key, value in row.items():
+            if pd.isna(value):
+                continue
+            properties[key] = value.item() if hasattr(value, 'item') else value
+
+        features.append({
+            'type': 'Feature',
+            'geometry': geometry,
+            'properties': properties,
+        })
+
+    return {'type': 'FeatureCollection', 'features': features}
+
+
 @st.cache_data
-def load_ndvi_heatmap_points(max_points=3000):
+def load_real_mangrove_geometry(selected_year):
+    for path in REAL_MANGROVE_GEOMETRY_FILES:
+        if not path.exists():
+            continue
+
+        if path.suffix.lower() == '.csv':
+            feature_collection = load_feature_collection_from_csv(path)
+        else:
+            feature_collection = normalize_feature_collection(
+                json.loads(path.read_text(encoding='utf-8'))
+            )
+
+        features = feature_collection.get('features', [])
+        has_year_dimension = any(feature_year(feature) is not None for feature in features)
+
+        if has_year_dimension:
+            filtered_features = [
+                feature for feature in features
+                if feature_year(feature) == selected_year
+            ]
+        else:
+            filtered_features = features
+
+        center, bounds = build_bounds_and_center_from_features(filtered_features)
+        if not filtered_features or not center or not bounds:
+            return {
+                'feature_collection': {'type': 'FeatureCollection', 'features': []},
+                'center': None,
+                'bounds': None,
+                'feature_count': 0,
+                'source_path': str(path),
+                'source_name': path.name,
+                'has_year_dimension': has_year_dimension,
+            }
+
+        return {
+            'feature_collection': {
+                'type': 'FeatureCollection',
+                'features': filtered_features,
+            },
+            'center': center,
+            'bounds': bounds,
+            'feature_count': len(filtered_features),
+            'source_path': str(path),
+            'source_name': path.name,
+            'has_year_dimension': has_year_dimension,
+        }
+
+    return {
+        'feature_collection': {'type': 'FeatureCollection', 'features': []},
+        'center': None,
+        'bounds': None,
+        'feature_count': 0,
+        'source_path': None,
+        'source_name': None,
+        'has_year_dimension': False,
+    }
+
+
+def point_in_zone(lat, lng, zone):
+    return (
+        zone['south'] <= lat <= zone['north']
+        and zone['west'] <= lng <= zone['east']
+    )
+
+
+def sample_zone_points(zone_points, max_points):
+    total_points = sum(len(points) for points in zone_points.values())
+    if not max_points or total_points <= max_points:
+        return [point for points in zone_points.values() for point in points]
+
+    non_empty_zones = [points for points in zone_points.values() if points]
+    if not non_empty_zones:
+        return []
+
+    zone_cap = max(1, int(np.ceil(max_points / len(non_empty_zones))))
+    sampled = []
+    for points in zone_points.values():
+        if len(points) > zone_cap:
+            stride = int(np.ceil(len(points) / zone_cap))
+            sampled.extend(points[::stride])
+        else:
+            sampled.extend(points)
+
+    if len(sampled) > max_points:
+        stride = int(np.ceil(len(sampled) / max_points))
+        sampled = sampled[::stride]
+
+    return sampled[:max_points]
+
+
+@st.cache_data
+def load_mangrove_focus_points(max_points=600, ndvi_threshold=MANGROVE_NDVI_THRESHOLD):
     ndvi_path = BASE_DIR / "Mumbai_NDVI_CSV.csv"
     if not ndvi_path.exists():
-        return [], None, None, 0
+        return [], None, None, 0, []
 
     ndvi = pd.read_csv(ndvi_path, usecols=['NDVI', '.geo']).dropna(subset=['.geo'])
-    points = []
+    zone_points = {zone['name']: [] for zone in MANGROVE_FOCUS_ZONES}
+    total_samples = 0
+
     for ndvi_value, geo_blob in ndvi[['NDVI', '.geo']].itertuples(index=False):
         try:
             geo = json.loads(geo_blob)
@@ -338,18 +564,107 @@ def load_ndvi_heatmap_points(max_points=3000):
         except (TypeError, ValueError):
             continue
 
-        points.append({'lat': lat, 'lng': lon, 'weight': max(ndvi_value, 0.0)})
+        total_samples += 1
+        if ndvi_value < ndvi_threshold:
+            continue
 
-    total_points = len(points)
-    if max_points and total_points > max_points:
-        stride = int(np.ceil(total_points / max_points))
-        points = points[::stride]
+        zone = next((z for z in MANGROVE_FOCUS_ZONES if point_in_zone(lat, lon, z)), None)
+        if not zone:
+            continue
+
+        zone_points[zone['name']].append({
+            'lat': lat,
+            'lng': lon,
+            'weight': ndvi_value,
+            'ndvi': ndvi_value,
+            'zone': zone['name'],
+        })
+
+    points = sample_zone_points(zone_points, max_points=max_points)
 
     if not points:
-        return [], None, None, total_points
+        return [], None, None, total_samples, []
 
     lats = [p['lat'] for p in points]
     lngs = [p['lng'] for p in points]
+    center = {'lat': float(np.mean(lats)), 'lng': float(np.mean(lngs))}
+    bounds = {
+        'south': float(min(lats)),
+        'west': float(min(lngs)),
+        'north': float(max(lats)),
+        'east': float(max(lngs)),
+    }
+    zone_summary = [
+        {'name': zone_name, 'count': len(zone_points[zone_name])}
+        for zone_name in zone_points
+        if zone_points[zone_name]
+    ]
+    return points, center, bounds, total_samples, zone_summary
+
+
+@st.cache_data
+def load_mumbai_ndvi_loss_points(max_points=5000):
+    ndvi_path = BASE_DIR / "Mumbai_NDVI_CSV.csv"
+    if not ndvi_path.exists():
+        return [], None, None, 0
+
+    ndvi = pd.read_csv(ndvi_path, usecols=['NDVI', '.geo']).dropna(subset=['.geo'])
+    rows = []
+
+    for ndvi_value, geo_blob in ndvi[['NDVI', '.geo']].itertuples(index=False):
+        try:
+            geometry = json.loads(geo_blob)
+        except (TypeError, json.JSONDecodeError):
+            continue
+
+        if geometry.get('type') != 'Point':
+            continue
+
+        coords = geometry.get('coordinates', [])
+        if len(coords) != 2:
+            continue
+
+        lon, lat = coords
+        try:
+            lat = float(lat)
+            lon = float(lon)
+            ndvi_value = float(ndvi_value)
+        except (TypeError, ValueError):
+            continue
+
+        rows.append({
+            'lat': lat,
+            'lng': lon,
+            'ndvi': ndvi_value,
+        })
+
+    total_points = len(rows)
+    if not rows:
+        return [], None, None, total_points
+
+    ndvi_values = np.array([row['ndvi'] for row in rows], dtype=float)
+    min_ndvi = float(np.min(ndvi_values))
+    max_ndvi = float(np.max(ndvi_values))
+    spread = max(max_ndvi - min_ndvi, 1e-9)
+
+    points = []
+    for row in rows:
+        normalized_ndvi = (row['ndvi'] - min_ndvi) / spread
+        loss_weight = 1 - normalized_ndvi
+        points.append({
+            'lat': row['lat'],
+            'lng': row['lng'],
+            'ndvi': row['ndvi'],
+            'weight': float(np.clip(loss_weight, 0.05, 1.0)),
+            'loss_score': float(np.clip(loss_weight * 100, 0.0, 100.0)),
+        })
+
+    if max_points and len(points) > max_points:
+        stride = int(np.ceil(len(points) / max_points))
+        points = points[::stride]
+
+    lats = [point['lat'] for point in points]
+    lngs = [point['lng'] for point in points]
     center = {'lat': float(np.mean(lats)), 'lng': float(np.mean(lngs))}
     bounds = {
         'south': float(min(lats)),
@@ -374,10 +689,13 @@ def load_leaflet_heatmap_assets():
     )
 
 
-def build_leaflet_heatmap_html(points, center, bounds):
+def build_leaflet_heatmap_html(points, center, bounds, feature_collection=None, metadata=None):
     template, css_text, js_text = load_leaflet_heatmap_assets()
     if not template:
         return None
+
+    feature_collection = feature_collection or {'type': 'FeatureCollection', 'features': []}
+    metadata = metadata or {}
 
     return (
         template
@@ -386,6 +704,8 @@ def build_leaflet_heatmap_html(points, center, bounds):
         .replace("__HEATMAP_POINTS__", json.dumps(points))
         .replace("__HEATMAP_CENTER__", json.dumps(center))
         .replace("__HEATMAP_BOUNDS__", json.dumps(bounds))
+        .replace("__MAP_FEATURES__", json.dumps(feature_collection))
+        .replace("__MAP_METADATA__", json.dumps(metadata))
     )
 
 a2020 = df['mangrove_area_sq_km'].iloc[0]
@@ -902,21 +1222,57 @@ with T6:
     % change. Reveals which metrics are deteriorating fastest and when shifts occurred.</div>""",
     unsafe_allow_html=True)
 
-    st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Spatial Heatmap (Leaflet) — Mumbai Region</div>", unsafe_allow_html=True)
-    spatial_points, map_center, map_bounds, total_ndvi_points = load_ndvi_heatmap_points(max_points=3000)
+    st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Mangrove Loss Map (Leaflet) — NDVI Heatmap</div>", unsafe_allow_html=True)
+    real_geometry = load_real_mangrove_geometry(selected_year)
+    geometry_features = real_geometry['feature_collection']['features']
 
-    if not spatial_points:
-        st.warning("NDVI point geometry was not found, so the Leaflet spatial heatmap could not be rendered.")
-    else:
-        leaflet_html = build_leaflet_heatmap_html(spatial_points, map_center, map_bounds)
+    if geometry_features:
+        leaflet_html = build_leaflet_heatmap_html(
+            points=[],
+            center=real_geometry['center'],
+            bounds=real_geometry['bounds'],
+            feature_collection=real_geometry['feature_collection'],
+            metadata={
+                'selectedYear': selected_year,
+                'dataMode': 'real_geometry',
+                'sourceName': real_geometry['source_name'],
+                'isApproximate': False,
+            },
+        )
         if leaflet_html is None:
-            st.warning("Leaflet heatmap asset files are missing. Expected `web/leaflet_heatmap/heatmap_template.html`, `heatmap.css`, and `heatmap.js`.")
+            st.warning("Leaflet map asset files are missing. Expected `web/leaflet_heatmap/heatmap_template.html`, `heatmap.css`, and `heatmap.js`.")
         else:
             components.html(leaflet_html, height=760, scrolling=False)
             st.caption(
-                f"Leaflet heatmap rendered with {len(spatial_points)} sampled NDVI points "
-                f"from {total_ndvi_points} total Mumbai region points."
+                f"Displaying {real_geometry['feature_count']} real mangrove features for {selected_year} "
+                f"from `{real_geometry['source_name']}`."
             )
+    else:
+        heat_points, map_center, map_bounds, total_ndvi_points = load_mumbai_ndvi_loss_points(max_points=5000)
+        if not heat_points:
+            st.warning("`Mumbai_NDVI_CSV.csv` could not be parsed, so the mangrove heatmap could not be rendered.")
+        else:
+            leaflet_html = build_leaflet_heatmap_html(
+                points=heat_points,
+                center=map_center,
+                bounds=map_bounds,
+                feature_collection={'type': 'FeatureCollection', 'features': []},
+                metadata={
+                    'selectedYear': selected_year,
+                    'dataMode': 'ndvi_heatmap',
+                    'sourceName': 'Mumbai_NDVI_CSV.csv',
+                    'isApproximate': False,
+                },
+            )
+            if leaflet_html is None:
+                st.warning("Leaflet map asset files are missing. Expected `web/leaflet_heatmap/heatmap_template.html`, `heatmap.css`, and `heatmap.js`.")
+            else:
+                components.html(leaflet_html, height=760, scrolling=False)
+                st.caption(
+                    f"Displaying a mangrove loss heatmap from {len(heat_points)} NDVI coordinates "
+                    f"sampled from {total_ndvi_points} rows in `Mumbai_NDVI_CSV.csv`. "
+                    f"Red indicates lower NDVI and likely higher vegetation loss."
+                )
 
     st.markdown("<hr>", unsafe_allow_html=True)
 

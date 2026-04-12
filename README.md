@@ -24,16 +24,19 @@ GreenSetu/
 │   ├── gee_export.csv               # General Earth Engine export
 │   ├── mangrove_2020_2025_final.csv # Final cleaned mangrove data (2020-2025)
 │   ├── mangrove_to_urban_2020_2025_final.csv # Mangrove to urban conversion data
-│   └── mangrove_to_urban_gee_export_v2.csv # Version 2 of mangrove to urban export
+│   ├── mangrove_to_urban_gee_export_v2.csv # Version 2 of mangrove to urban export
+│   └── mumbai_mangrove_geometry.geojson # Real mangrove geometry for map rendering (optional)
 ├── gee/                             # Google Earth Engine scripts
 │   ├── mumbai_mangrove_analysis.js  # Script for Mumbai mangrove analysis
+│   ├── mumbai_mangrove_geometry_export.js # Export real mangrove polygons for the dashboard
 │   ├── mumbai_mangrove_to_urban_analysis.js # Script for mangrove to urban analysis
 │   ├── mumbai_urban_growth_analysis.js # Script for urban growth analysis
 │   └── thane_creek_mangrove_2020_2025.js # Script for Thane Creek mangrove analysis
 └── scripts/                         # Python scripts for data cleaning
     ├── clean_mangrove_export.py     # Script to clean mangrove export data
     ├── clean_mangrove_to_urban_export.py # Script to clean mangrove to urban export
-    └── clean_urban_export.py        # Script to clean urban export data
+    ├── clean_urban_export.py        # Script to clean urban export data
+    └── gee_table_to_geojson.py      # Convert GEE CSV geometry exports into GeoJSON
 ```
 
 ## How to Run
@@ -64,6 +67,7 @@ http://localhost:8501
 
 ### Notes
 - The dashboard reads its datasets from the `data/` folder automatically.
+- For the real mangrove map, place `mumbai_mangrove_geometry.geojson` or `mumbai_mangrove_geometry.csv` inside `data/`.
 - Run the command from the project root directory.
 
 ## SDG Alignment
