@@ -276,11 +276,14 @@ REAL_MANGROVE_GEOMETRY_FILES = [
 ]
 MANGROVE_NDVI_THRESHOLD = 0.32
 MANGROVE_FOCUS_ZONES = [
-    {"name": "Malad-Gorai", "south": 19.12, "north": 19.22, "west": 72.76, "east": 72.87},
-    {"name": "Mahim-Mithi", "south": 19.02, "north": 19.08, "west": 72.82, "east": 72.87},
-    {"name": "Mahul-Sewri", "south": 19.00, "north": 19.06, "west": 72.90, "east": 72.98},
-    {"name": "Thane Creek", "south": 19.08, "north": 19.20, "west": 72.96, "east": 73.05},
-    {"name": "Vashi-Panvel", "south": 18.99, "north": 19.08, "west": 73.00, "east": 73.09},
+    {"name": "Thane Creek Flamingo Sanctuary", "south": 19.12, "north": 19.20, "west": 73.00, "east": 73.04},
+    {"name": "Gorai Creek", "south": 19.18, "north": 19.21, "west": 72.79, "east": 72.82},
+    {"name": "Malad Creek", "south": 19.16, "north": 19.20, "west": 72.82, "east": 72.88},
+    {"name": "Mahim Creek", "south": 19.01, "north": 19.06, "west": 72.82, "east": 72.87},
+    {"name": "Vikhroli Mangroves", "south": 19.08, "north": 19.14, "west": 72.93, "east": 72.97},
+    {"name": "Airoli Mangroves", "south": 19.14, "north": 19.19, "west": 72.97, "east": 73.00},
+    {"name": "Sewri Mudflats", "south": 18.98, "north": 19.02, "west": 72.86, "east": 72.90},
+    {"name": "Versova Creek", "south": 19.12, "north": 19.16, "west": 72.79, "east": 72.82},
 ]
 
 # ── DATA ──────────────────────────────────────────────────────────────
@@ -594,11 +597,21 @@ def load_mangrove_focus_points(max_points=600, ndvi_threshold=MANGROVE_NDVI_THRE
         'north': float(max(lats)),
         'east': float(max(lngs)),
     }
-    zone_summary = [
-        {'name': zone_name, 'count': len(zone_points[zone_name])}
-        for zone_name in zone_points
-        if zone_points[zone_name]
-    ]
+    zone_summary = []
+    for zone in MANGROVE_FOCUS_ZONES:
+        zone_name = zone['name']
+        zone_samples = zone_points.get(zone_name, [])
+        ndvi_values = [item['ndvi'] for item in zone_samples]
+        mean_ndvi = float(np.mean(ndvi_values)) if ndvi_values else None
+
+        zone_summary.append({
+            'name': zone_name,
+            'count': len(zone_samples),
+            'avg_ndvi': mean_ndvi,
+            'center_lat': float((zone['south'] + zone['north']) / 2),
+            'center_lng': float((zone['west'] + zone['east']) / 2),
+        })
+
     return points, center, bounds, total_samples, zone_summary
 
 
@@ -1222,21 +1235,24 @@ with T6:
     % change. Reveals which metrics are deteriorating fastest and when shifts occurred.</div>""",
     unsafe_allow_html=True)
 
-    st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Mangrove Loss Map (Leaflet) — NDVI Heatmap</div>", unsafe_allow_html=True)
-    real_geometry = load_real_mangrove_geometry(selected_year)
-    geometry_features = real_geometry['feature_collection']['features']
-
-    if geometry_features:
+    st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Mangrove Density Map (Leaflet) — Focus Locations</div>", unsafe_allow_html=True)
+    focus_points, map_center, map_bounds, total_ndvi_points, zone_summary = load_mangrove_focus_points(max_points=900)
+    if not focus_points:
+        st.warning("No dense mangrove points were found in the selected focus locations from `Mumbai_NDVI_CSV.csv`.")
+    else:
         leaflet_html = build_leaflet_heatmap_html(
-            points=[],
-            center=real_geometry['center'],
-            bounds=real_geometry['bounds'],
-            feature_collection=real_geometry['feature_collection'],
+            points=focus_points,
+            center=map_center,
+            bounds=map_bounds,
+            feature_collection={'type': 'FeatureCollection', 'features': []},
             metadata={
                 'selectedYear': selected_year,
-                'dataMode': 'real_geometry',
-                'sourceName': real_geometry['source_name'],
+                'dataMode': 'focus_density_heatmap',
+                'sourceName': 'Mumbai_NDVI_CSV.csv',
                 'isApproximate': False,
+                'ndviThreshold': MANGROVE_NDVI_THRESHOLD,
+                'focusLocations': [zone['name'] for zone in MANGROVE_FOCUS_ZONES],
+                'zoneSummary': zone_summary,
             },
         )
         if leaflet_html is None:
@@ -1244,35 +1260,10 @@ with T6:
         else:
             components.html(leaflet_html, height=760, scrolling=False)
             st.caption(
-                f"Displaying {real_geometry['feature_count']} real mangrove features for {selected_year} "
-                f"from `{real_geometry['source_name']}`."
+                f"Displaying mangrove density from {len(focus_points)} NDVI points (threshold >= {MANGROVE_NDVI_THRESHOLD:.2f}) "
+                f"sampled from {total_ndvi_points} rows in `Mumbai_NDVI_CSV.csv`, restricted to: "
+                f"{', '.join(zone['name'] for zone in MANGROVE_FOCUS_ZONES)}."
             )
-    else:
-        heat_points, map_center, map_bounds, total_ndvi_points = load_mumbai_ndvi_loss_points(max_points=5000)
-        if not heat_points:
-            st.warning("`Mumbai_NDVI_CSV.csv` could not be parsed, so the mangrove heatmap could not be rendered.")
-        else:
-            leaflet_html = build_leaflet_heatmap_html(
-                points=heat_points,
-                center=map_center,
-                bounds=map_bounds,
-                feature_collection={'type': 'FeatureCollection', 'features': []},
-                metadata={
-                    'selectedYear': selected_year,
-                    'dataMode': 'ndvi_heatmap',
-                    'sourceName': 'Mumbai_NDVI_CSV.csv',
-                    'isApproximate': False,
-                },
-            )
-            if leaflet_html is None:
-                st.warning("Leaflet map asset files are missing. Expected `web/leaflet_heatmap/heatmap_template.html`, `heatmap.css`, and `heatmap.js`.")
-            else:
-                components.html(leaflet_html, height=760, scrolling=False)
-                st.caption(
-                    f"Displaying a mangrove loss heatmap from {len(heat_points)} NDVI coordinates "
-                    f"sampled from {total_ndvi_points} rows in `Mumbai_NDVI_CSV.csv`. "
-                    f"Red indicates lower NDVI and likely higher vegetation loss."
-                )
 
     st.markdown("<hr>", unsafe_allow_html=True)
 

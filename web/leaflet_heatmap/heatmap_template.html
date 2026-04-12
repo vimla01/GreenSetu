@@ -7,9 +7,9 @@ __LEAFLET_CUSTOM_CSS__
 <div class="leaflet-heatmap-shell">
   <div class="leaflet-heatmap-hero">
     <div class="leaflet-hero-left">
-      <div class="leaflet-kicker">Spatial Intelligence</div>
-      <div class="leaflet-heatmap-title">Mumbai Mangrove Loss Map</div>
-      <div class="leaflet-heatmap-sub">NDVI coordinates are rendered as a heatmap by default, while real mangrove geometry is used automatically when available.</div>
+      <div class="leaflet-kicker">Focused Coastal Intelligence</div>
+      <div class="leaflet-heatmap-title">Mumbai Dense Mangrove Hotspots</div>
+      <div class="leaflet-heatmap-sub">Heat intensity represents denser mangrove presence from NDVI samples, restricted to the eight selected creek and mudflat locations.</div>
     </div>
     <div class="leaflet-hero-stats">
       <div class="leaflet-stat">
@@ -17,7 +17,7 @@ __LEAFLET_CUSTOM_CSS__
         <strong id="hm-points">--</strong>
       </div>
       <div class="leaflet-stat">
-        <span>Selected Year</span>
+        <span id="hm-zones-label">Selected Year</span>
         <strong id="hm-zones">--</strong>
       </div>
       <div class="leaflet-stat">
@@ -33,6 +33,7 @@ __LEAFLET_CUSTOM_CSS__
 
   <div class="leaflet-map-meta-wrap">
     <div id="leaflet-heatmap-meta" class="leaflet-heatmap-meta"></div>
+    <div id="hm-zone-chips" class="leaflet-zone-chip-wrap" aria-label="Focused mangrove locations"></div>
   </div>
 
   <div class="leaflet-map-stage">

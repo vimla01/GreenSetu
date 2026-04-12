@@ -1,11 +1,11 @@
 .leaflet-heatmap-shell {
   width: 100%;
-  border: 1px solid #dfe7df;
-  border-radius: 16px;
+  border: 1px solid #d8e6da;
+  border-radius: 18px;
   background: #ffffff;
   overflow: hidden;
   box-sizing: border-box;
-  box-shadow: 0 10px 28px rgba(20, 40, 20, 0.08);
+  box-shadow: 0 16px 34px rgba(19, 43, 28, 0.11);
 }
 
 .leaflet-heatmap-hero {
@@ -15,8 +15,9 @@
   padding: 14px 16px;
   border-bottom: 1px solid #e5e9e5;
   background:
-    radial-gradient(circle at 16% 18%, rgba(58, 170, 106, 0.14), transparent 45%),
-    linear-gradient(135deg, #f8fcf9 0%, #ffffff 55%, #f8f7f2 100%);
+    radial-gradient(circle at 12% 10%, rgba(52, 179, 117, 0.18), transparent 42%),
+    radial-gradient(circle at 88% 8%, rgba(146, 219, 179, 0.16), transparent 36%),
+    linear-gradient(135deg, #f4fbf7 0%, #ffffff 55%, #f2f8f4 100%);
 }
 
 .leaflet-hero-left {
@@ -101,6 +102,37 @@
     #f9fcfa;
 }
 
+.leaflet-zone-chip-wrap {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.leaflet-zone-chip {
+  font-family: Outfit, sans-serif;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #dbe8de;
+  background: #f7fbf8;
+  color: #456045;
+}
+
+.leaflet-zone-chip.has-data {
+  border-color: #b9d7c2;
+  background: #ecf8f0;
+  color: #1f6243;
+}
+
+.leaflet-zone-chip.is-hot {
+  border-color: #f0a965;
+  background: #fff0df;
+  color: #a02b14;
+  box-shadow: 0 0 0 1px rgba(240, 169, 101, 0.25), 0 4px 10px rgba(176, 54, 23, 0.14);
+}
+
 #leaflet-ndvi-heatmap {
   width: 100%;
   height: 560px;
@@ -111,6 +143,18 @@
 
 .leaflet-map-stage {
   position: relative;
+  overflow: hidden;
+}
+
+.leaflet-map-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 78%, rgba(95, 190, 138, 0.14), transparent 40%),
+    radial-gradient(circle at 82% 24%, rgba(34, 131, 90, 0.1), transparent 44%);
+  mix-blend-mode: multiply;
 }
 
 .leaflet-view-switch {
@@ -156,15 +200,15 @@
   top: 14px;
   left: 14px;
   z-index: 450;
-  border: 1px solid #dce6dc;
+  border: 1px solid #c7dccd;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
-  color: #304030;
+  color: #214f34;
   font-family: Outfit, sans-serif;
   font-size: 11px;
   font-weight: 600;
   padding: 6px 10px;
-  box-shadow: 0 2px 10px rgba(20, 40, 20, 0.09);
+  box-shadow: 0 6px 14px rgba(20, 50, 32, 0.12);
 }
 
 .leaflet-view-switch + #leaflet-ndvi-heatmap + .leaflet-map-badge,
@@ -192,11 +236,11 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: linear-gradient(
     90deg,
-    #0f9d58 0%,
-    #8bc34a 28%,
-    #f4c542 58%,
-    #f08c2e 80%,
-    #d63b31 100%
+    #fff4bf 0%,
+    #ffd27d 32%,
+    #ff9f43 58%,
+    #ef5f2f 80%,
+    #b91622 100%
   );
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.6);
 }
