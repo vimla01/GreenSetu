@@ -10,8 +10,10 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import streamlit as st
+import streamlit.components.v1 as components
 from sklearn.linear_model import LinearRegression
 from pathlib import Path
+import json
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -266,6 +268,7 @@ def theme(fig, h=400, xticks=None):
 YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
+LEAFLET_HEATMAP_DIR = BASE_DIR / "web" / "leaflet_heatmap"
 
 # ── DATA ──────────────────────────────────────────────────────────────
 @st.cache_data
@@ -304,6 +307,86 @@ def load():
     return df, urban, gee, gee_u, pred
 
 df, urban, gee, gee_u, pred = load()
+
+
+@st.cache_data
+def load_ndvi_heatmap_points(max_points=3000):
+    ndvi_path = BASE_DIR / "Mumbai_NDVI_CSV.csv"
+    if not ndvi_path.exists():
+        return [], None, None, 0
+
+    ndvi = pd.read_csv(ndvi_path, usecols=['NDVI', '.geo']).dropna(subset=['.geo'])
+    points = []
+    for ndvi_value, geo_blob in ndvi[['NDVI', '.geo']].itertuples(index=False):
+        try:
+            geo = json.loads(geo_blob)
+        except (TypeError, json.JSONDecodeError):
+            continue
+
+        if geo.get('type') != 'Point':
+            continue
+
+        coords = geo.get('coordinates', [])
+        if len(coords) != 2:
+            continue
+
+        lon, lat = coords
+        try:
+            lat = float(lat)
+            lon = float(lon)
+            ndvi_value = float(ndvi_value)
+        except (TypeError, ValueError):
+            continue
+
+        points.append({'lat': lat, 'lng': lon, 'weight': max(ndvi_value, 0.0)})
+
+    total_points = len(points)
+    if max_points and total_points > max_points:
+        stride = int(np.ceil(total_points / max_points))
+        points = points[::stride]
+
+    if not points:
+        return [], None, None, total_points
+
+    lats = [p['lat'] for p in points]
+    lngs = [p['lng'] for p in points]
+    center = {'lat': float(np.mean(lats)), 'lng': float(np.mean(lngs))}
+    bounds = {
+        'south': float(min(lats)),
+        'west': float(min(lngs)),
+        'north': float(max(lats)),
+        'east': float(max(lngs)),
+    }
+    return points, center, bounds, total_points
+
+
+def load_leaflet_heatmap_assets():
+    html_path = LEAFLET_HEATMAP_DIR / "heatmap_template.html"
+    css_path = LEAFLET_HEATMAP_DIR / "heatmap.css"
+    js_path = LEAFLET_HEATMAP_DIR / "heatmap.js"
+    if not (html_path.exists() and css_path.exists() and js_path.exists()):
+        return None, None, None
+
+    return (
+        html_path.read_text(encoding='utf-8'),
+        css_path.read_text(encoding='utf-8'),
+        js_path.read_text(encoding='utf-8'),
+    )
+
+
+def build_leaflet_heatmap_html(points, center, bounds):
+    template, css_text, js_text = load_leaflet_heatmap_assets()
+    if not template:
+        return None
+
+    return (
+        template
+        .replace("__LEAFLET_CUSTOM_CSS__", css_text)
+        .replace("__LEAFLET_CUSTOM_JS__", js_text)
+        .replace("__HEATMAP_POINTS__", json.dumps(points))
+        .replace("__HEATMAP_CENTER__", json.dumps(center))
+        .replace("__HEATMAP_BOUNDS__", json.dumps(bounds))
+    )
 
 a2020 = df['mangrove_area_sq_km'].iloc[0]
 a2025 = df['mangrove_area_sq_km'].iloc[-1]
@@ -819,6 +902,24 @@ with T6:
     % change. Reveals which metrics are deteriorating fastest and when shifts occurred.</div>""",
     unsafe_allow_html=True)
 
+    st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Spatial Heatmap (Leaflet) — Mumbai Region</div>", unsafe_allow_html=True)
+    spatial_points, map_center, map_bounds, total_ndvi_points = load_ndvi_heatmap_points(max_points=3000)
+
+    if not spatial_points:
+        st.warning("NDVI point geometry was not found, so the Leaflet spatial heatmap could not be rendered.")
+    else:
+        leaflet_html = build_leaflet_heatmap_html(spatial_points, map_center, map_bounds)
+        if leaflet_html is None:
+            st.warning("Leaflet heatmap asset files are missing. Expected `web/leaflet_heatmap/heatmap_template.html`, `heatmap.css`, and `heatmap.js`.")
+        else:
+            components.html(leaflet_html, height=760, scrolling=False)
+            st.caption(
+                f"Leaflet heatmap rendered with {len(spatial_points)} sampled NDVI points "
+                f"from {total_ndvi_points} total Mumbai region points."
+            )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
     mh  = df.merge(urban[['year','mangrove_to_urban_sq_km','new_conversion_sq_km']], on='year', how='left')
     mhs = ['mangrove_area_sq_km','reduction_sq_km','mangrove_to_urban_sq_km',
            'new_conversion_sq_km','carbon_tc','carbon_lost_tc','carbon_lost_pct']
@@ -836,32 +937,46 @@ with T6:
     hdf = hdf.dropna()
     zy  = np.clip(hdf[mhs].values.T, -300, 300)
 
-    CS  = [[0,'#e8f5ee'],[0.4,'#a8d5ba'],[0.7,'#f5cba7'],[1,'#c0392b']]
+    CS  = [[0,'#e7f7ee'],[0.28,'#9fdcb7'],[0.52,'#38ad77'],[0.78,'#e1a13e'],[1,'#c0392b']]
+    CS_D = [[0,'#2d6d97'],[0.5,'#f7f9f8'],[1,'#c13a2e']]
 
-    def hmap(z, xl, yl, cs, title, zmid=None):
+    def hmap(z, xl, yl, cs, title, zmid=None, cbar_title='Intensity'):
         kw = {'zmid': zmid} if zmid is not None else {}
         fig = go.Figure(go.Heatmap(z=z, x=xl, y=yl, colorscale=cs,
             text=[[f"{v:.2f}" for v in row] for row in z],
             texttemplate='%{text}', textfont=dict(size=11, color='#1a1f1a'),
-            showscale=True, colorbar=dict(tickfont=dict(size=9), len=0.9), **kw))
+            xgap=3, ygap=3, hoverongaps=False,
+            colorbar=dict(
+                title=dict(text=cbar_title, side='top', font=dict(size=10)),
+                tickfont=dict(size=9), len=0.86, thickness=14, outlinewidth=0
+            ),
+            hovertemplate='<b>%{y}</b><br>Year: %{x}<br>Value: %{z:.3f}<extra></extra>',
+            **kw))
         theme(fig, 360)
-        fig.update_layout(title=dict(text=title), xaxis_title='Year')
+        fig.update_layout(
+            title=dict(text=title, x=0.01, xanchor='left'),
+            xaxis_title='Year',
+            margin=dict(l=70, r=28, t=54, b=44),
+        )
+        fig.update_xaxes(side='top', showgrid=False, tickfont=dict(size=11, color='#3f513f'))
+        fig.update_yaxes(showgrid=False, tickfont=dict(size=11, color='#3f513f'), automargin=True)
         return fig
 
     ht1, ht2, ht3 = st.tabs(["Raw Values","Normalized (% of Max)","Year-on-Year Change"])
     with ht1:
-        st.plotly_chart(hmap(zr, YEARS, lhs, CS, 'Raw Metric Values (2020–2025)'),
+        st.plotly_chart(hmap(zr, YEARS, lhs, CS, 'Raw Metric Values (2020–2025)', cbar_title='Metric Value'),
                         use_container_width=True)
     with ht2:
-        st.plotly_chart(hmap(zn, YEARS, lhs, CS, 'Normalized — % of Row Maximum'),
+        st.plotly_chart(hmap(zn, YEARS, lhs, CS, 'Normalized — % of Row Maximum', cbar_title='% of Row Max'),
                         use_container_width=True)
         st.markdown("""<div class="callout g"><strong>Reading this chart:</strong> Each row normalized 
         so its max = 100%. Green = low relative value; Red = near maximum. 
         Carbon Lost % and Urban Conversion show deepening red toward 2025.</div>""",
         unsafe_allow_html=True)
     with ht3:
-        st.plotly_chart(hmap(zy, hdf['year'].tolist(), lhs, 'RdBu_r',
-                             'Year-on-Year % Change (Blue = decrease, Red = increase)', zmid=0),
+        st.plotly_chart(hmap(zy, hdf['year'].tolist(), lhs, CS_D,
+                             'Year-on-Year % Change (Blue = decrease, Red = increase)', zmid=0,
+                             cbar_title='YoY % Change'),
                         use_container_width=True)
         st.markdown("""<div class="callout r"><strong>Alert — 2025 Urban Conversion:</strong> 
         The Urban Conversion row shows extreme positive change in 2025, reflecting structural 

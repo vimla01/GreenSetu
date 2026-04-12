@@ -1,0 +1,73 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+__LEAFLET_CUSTOM_CSS__
+</style>
+
+<div class="leaflet-heatmap-shell">
+  <div class="leaflet-heatmap-hero">
+    <div class="leaflet-hero-left">
+      <div class="leaflet-kicker">Spatial Intelligence</div>
+      <div class="leaflet-heatmap-title">Mumbai Coastal NDVI Intensity</div>
+      <div class="leaflet-heatmap-sub">Interactive hotspot view of vegetation signal across the same Mumbai region used in this dashboard.</div>
+    </div>
+    <div class="leaflet-hero-stats">
+      <div class="leaflet-stat">
+        <span>Sampled Points</span>
+        <strong id="hm-points">--</strong>
+      </div>
+      <div class="leaflet-stat">
+        <span>Region Span</span>
+        <strong id="hm-span">--</strong>
+      </div>
+      <div class="leaflet-stat">
+        <span>Layer Mode</span>
+        <strong id="hm-mode">--</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="leaflet-toolbar">
+    <label>
+      Basemap
+      <select id="hm-basemap">
+        <option value="Light">Light</option>
+        <option value="Street">Street</option>
+        <option value="Satellite">Satellite</option>
+      </select>
+    </label>
+    <label>
+      Heat Radius
+      <input id="hm-radius" type="range" min="12" max="38" value="22" step="1" />
+      <span id="hm-radius-value">22</span>
+    </label>
+    <label>
+      Heat Opacity
+      <input id="hm-opacity" type="range" min="25" max="95" value="78" step="1" />
+      <span id="hm-opacity-value">78%</span>
+    </label>
+    <div id="leaflet-heatmap-meta" class="leaflet-heatmap-meta"></div>
+  </div>
+
+  <div class="leaflet-map-stage">
+    <div id="leaflet-ndvi-heatmap"></div>
+    <div id="hm-layer-status" class="leaflet-map-badge">Loading map...</div>
+  </div>
+
+  <div class="leaflet-heatmap-legend" aria-hidden="true">
+    <span>Low vegetation signal</span>
+    <div class="leaflet-heatmap-gradient"></div>
+    <span>High vegetation signal</span>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script>
+window.__MUMBAI_HEATMAP_POINTS__ = __HEATMAP_POINTS__;
+window.__MUMBAI_HEATMAP_CENTER__ = __HEATMAP_CENTER__;
+window.__MUMBAI_HEATMAP_BOUNDS__ = __HEATMAP_BOUNDS__;
+</script>
+<script>
+__LEAFLET_CUSTOM_JS__
+</script>
