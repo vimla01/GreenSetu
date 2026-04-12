@@ -18,8 +18,9 @@ htmlcov/
 # Notebook artifacts
 .ipynb_checkpoints/
 
-# Streamlit local secrets
+# Streamlit local state
 .streamlit/secrets.toml
+.streamlit/credentials.toml
 
 # Environment files
 .env
