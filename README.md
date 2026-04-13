@@ -15,11 +15,6 @@ The project focuses on understanding the environmental impact of rapid urbanizat
 ## Project Structure
 ```
 GreenSetu/
-├── .streamlit/config.toml           # Streamlit deployment settings
-├── .dockerignore                    # Docker build exclusions
-├── Dockerfile                       # Container deployment for Render/Railway/VPS
-├── Procfile                         # Process command for PaaS platforms
-├── requirements.txt                 # Python dependencies for local/dev/prod
 ├── dashboard_app.py                 # Main Streamlit dashboard application
 ├── graphs_plotty.ipynb              # Jupyter notebook for plotting graphs
 ├── Mumbai_NDVI_CSV.csv              # NDVI data for Mumbai
@@ -55,7 +50,7 @@ source .venv/bin/activate
 
 ### 2. Install dependencies
 ```bash
-pip install -r requirements.txt
+pip install streamlit pandas numpy plotly scikit-learn
 ```
 
 ### 3. Run the dashboard
@@ -74,43 +69,6 @@ http://localhost:8501
 - The dashboard reads its datasets from the `data/` folder automatically.
 - For the real mangrove map, place `mumbai_mangrove_geometry.geojson` or `mumbai_mangrove_geometry.csv` inside `data/`.
 - Run the command from the project root directory.
-
-## Deployment
-
-### Recommended: Streamlit Community Cloud
-This is the easiest option for this project because the app is already a single-file Streamlit dashboard and does not require secrets.
-
-1. Push this repository to GitHub.
-2. Create a new app in Streamlit Community Cloud.
-3. Select this repository and branch.
-4. Set the main file path to `dashboard_app.py`.
-5. Deploy.
-
-The platform will install packages from `requirements.txt` automatically.
-
-### Docker Deployment
-Use this for Render, Railway, a VM, or any container host.
-
-Build the image:
-```bash
-docker build -t greensetu .
-```
-
-Run it locally:
-```bash
-docker run --rm -p 8501:8501 greensetu
-```
-
-The container starts Streamlit with:
-```bash
-streamlit run dashboard_app.py --server.address=0.0.0.0 --server.port=${PORT:-8501}
-```
-
-### Non-Docker PaaS Start Command
-If your host asks for a start command, use:
-```bash
-streamlit run dashboard_app.py --server.address=0.0.0.0 --server.port=$PORT
-```
 
 ## SDG Alignment
 - SDG 11: Sustainable Cities & Communities

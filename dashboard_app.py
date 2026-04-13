@@ -315,10 +315,24 @@ df, urban, gee, gee_u, pred = load()
 def load_ndvi_heatmap_points(max_points=3000):
     ndvi_path = BASE_DIR / "Mumbai_NDVI_CSV.csv"
     if not ndvi_path.exists():
-        return [], None, None, 0
+        return [], None, None, 0, [], []
+
+    mangrove_locations = {
+        'Thane Creek Flamingo Sanctuary': {'north': 19.22, 'south': 19.18, 'east': 73.00, 'west': 72.95},
+        'Gorai Creek': {'north': 19.26, 'south': 19.22, 'east': 72.80, 'west': 72.75},
+        'Malad Creek': {'north': 19.22, 'south': 19.18, 'east': 72.86, 'west': 72.82},
+        'Mahim Creek': {'north': 19.07, 'south': 19.03, 'east': 72.87, 'west': 72.83},
+        'Vikhroli Mangroves': {'north': 19.14, 'south': 19.10, 'east': 72.96, 'west': 72.92},
+        'Airoli Mangroves': {'north': 19.20, 'south': 19.16, 'east': 73.02, 'west': 72.98},
+        'Sewri Mudflats': {'north': 19.02, 'south': 19.00, 'east': 72.87, 'west': 72.85},
+        'Versova Creek': {'north': 19.16, 'south': 19.12, 'east': 72.84, 'west': 72.80}
+    }
 
     ndvi = pd.read_csv(ndvi_path, usecols=['NDVI', '.geo']).dropna(subset=['.geo'])
     points = []
+    zone_points = {name: [] for name in mangrove_locations}
+    min_ndvi, max_ndvi = -0.165, 0.591
+
     for ndvi_value, geo_blob in ndvi[['NDVI', '.geo']].itertuples(index=False):
         try:
             geo = json.loads(geo_blob)
@@ -332,15 +346,33 @@ def load_ndvi_heatmap_points(max_points=3000):
         if len(coords) != 2:
             continue
 
-        lon, lat = coords
         try:
-            lat = float(lat)
-            lon = float(lon)
+            lon = float(coords[0])
+            lat = float(coords[1])
             ndvi_value = float(ndvi_value)
         except (TypeError, ValueError):
             continue
 
-        points.append({'lat': lat, 'lng': lon, 'weight': max(ndvi_value, 0.0)})
+        zone_name = None
+        for location_name, bounds in mangrove_locations.items():
+            if (bounds['south'] <= lat <= bounds['north'] and
+                bounds['west'] <= lon <= bounds['east']):
+                zone_name = location_name
+                break
+
+        if zone_name is None:
+            continue
+
+        normalized_weight = max(0.0, min(1.0, (ndvi_value - min_ndvi) / (max_ndvi - min_ndvi)))
+        point = {
+            'lat': lat,
+            'lng': lon,
+            'weight': normalized_weight,
+            'ndvi': ndvi_value,
+            'zone': zone_name
+        }
+        points.append(point)
+        zone_points[zone_name].append(point)
 
     total_points = len(points)
     if max_points and total_points > max_points:
@@ -348,7 +380,7 @@ def load_ndvi_heatmap_points(max_points=3000):
         points = points[::stride]
 
     if not points:
-        return [], None, None, total_points
+        return [], None, None, total_points, [], list(mangrove_locations.keys())
 
     lats = [p['lat'] for p in points]
     lngs = [p['lng'] for p in points]
@@ -359,7 +391,30 @@ def load_ndvi_heatmap_points(max_points=3000):
         'north': float(max(lats)),
         'east': float(max(lngs)),
     }
-    return points, center, bounds, total_points
+
+    zone_summary = []
+    for name, pts in zone_points.items():
+        if not pts:
+            zone_summary.append({
+                'name': name,
+                'count': 0,
+                'avg_ndvi': None,
+                'center_lat': (mangrove_locations[name]['north'] + mangrove_locations[name]['south']) / 2,
+                'center_lng': (mangrove_locations[name]['east'] + mangrove_locations[name]['west']) / 2
+            })
+            continue
+
+        avg_ndvi = float(np.mean([p['ndvi'] for p in pts]))
+        zone_summary.append({
+            'name': name,
+            'count': len(pts),
+            'avg_ndvi': avg_ndvi,
+            'center_lat': float(np.mean([p['lat'] for p in pts])),
+            'center_lng': float(np.mean([p['lng'] for p in pts]))
+        })
+
+    focus_locations = list(mangrove_locations.keys())
+    return points, center, bounds, total_points, zone_summary, focus_locations
 
 
 def load_leaflet_heatmap_assets():
@@ -376,10 +431,19 @@ def load_leaflet_heatmap_assets():
     )
 
 
-def build_leaflet_heatmap_html(points, center, bounds):
+def build_leaflet_heatmap_html(points, center, bounds, zone_summary, focus_locations, selected_year=None):
     template, css_text, js_text = load_leaflet_heatmap_assets()
     if not template:
         return None
+
+    metadata = {
+        'dataMode': 'focus_density_heatmap',
+        'selectedYear': selected_year,
+        'sourceName': 'Mumbai_NDVI_CSV.csv',
+        'focusLocations': focus_locations,
+        'zoneSummary': zone_summary,
+        'ndviThreshold': None
+    }
 
     return (
         template
@@ -388,6 +452,8 @@ def build_leaflet_heatmap_html(points, center, bounds):
         .replace("__HEATMAP_POINTS__", json.dumps(points))
         .replace("__HEATMAP_CENTER__", json.dumps(center))
         .replace("__HEATMAP_BOUNDS__", json.dumps(bounds))
+        .replace("__MAP_FEATURES__", json.dumps({"type": "FeatureCollection", "features": []}))
+        .replace("__MAP_METADATA__", json.dumps(metadata))
     )
 
 a2020 = df['mangrove_area_sq_km'].iloc[0]
@@ -925,20 +991,20 @@ if st.session_state.page == "dashboard":
         % change. Reveals which metrics are deteriorating fastest and when shifts occurred.</div>""",
         unsafe_allow_html=True)
 
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Spatial Heatmap (Leaflet) — Mumbai Region</div>", unsafe_allow_html=True)
-        spatial_points, map_center, map_bounds, total_ndvi_points = load_ndvi_heatmap_points(max_points=3000)
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Focused Mangrove Density Heatmap — Selected Locations Only</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:0.9rem;color:#4a5a4a;margin-bottom:0.8rem;'>This map visualizes only the eight requested Mumbai mangrove locations. Dark orange and red highlight the densest mangrove clusters in the selected regions.</div>", unsafe_allow_html=True)
+        spatial_points, map_center, map_bounds, total_ndvi_points, zone_summary, focus_locations = load_ndvi_heatmap_points(max_points=3000)
 
         if not spatial_points:
-            st.warning("NDVI point geometry was not found, so the Leaflet spatial heatmap could not be rendered.")
+            st.warning("NDVI point geometry was not found within the selected mangrove locations, so the Leaflet spatial heatmap could not be rendered.")
         else:
-            leaflet_html = build_leaflet_heatmap_html(spatial_points, map_center, map_bounds)
+            leaflet_html = build_leaflet_heatmap_html(spatial_points, map_center, map_bounds, zone_summary, focus_locations, selected_year)
             if leaflet_html is None:
                 st.warning("Leaflet heatmap asset files are missing. Expected `web/leaflet_heatmap/heatmap_template.html`, `heatmap.css`, and `heatmap.js`.")
             else:
-                components.html(leaflet_html, height=760, scrolling=False)
+                components.html(leaflet_html, height=780, scrolling=False)
                 st.caption(
-                    f"Leaflet heatmap rendered with {len(spatial_points)} sampled NDVI points "
-                    f"from {total_ndvi_points} total Mumbai region points."
+                    f"Heatmap shows {len(spatial_points)} NDVI points filtered to 8 specified mangrove regions. Dense areas render in dark orange/red; low-density areas are lighter yellow." 
                 )
 
         st.markdown("<hr>", unsafe_allow_html=True)
