@@ -1,0 +1,4 @@
+system:index,mangrove_area_sq_km,reduction_percent,reduction_sq_km,year,.geo
+0,0.0,100.0,12.989118294170785,1993,"{""type"":""MultiPoint"",""coordinates"":[]}"
+1,16.78361740079825,-29.2129074560076,-3.7944991066274643,2003,"{""type"":""MultiPoint"",""coordinates"":[]}"
+2,38.50477973521081,-196.43874867542672,-25.515661441040024,2013,"{""type"":""MultiPoint"",""coordinates"":[]}"
