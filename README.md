@@ -3,14 +3,27 @@
 The project focuses on understanding the environmental impact of rapid urbanization and supporting sustainable urban planning through data-driven insights.
 
 ## Objectives
-- Analyze mangrove cover change from 2015 to 2025
+- Analyze mangrove cover change from 2020 to 2025
 - Estimate carbon stock reduction due to mangrove loss
 - Compare mangrove decline with urban expansion
 - Develop an interactive web-based dashboard
 
 ## Data Sources
+
+- Google Earth Engine
 - Global Mangrove Watch
 - Government & environmental reports
+
+## Data Collection
+- Study Area (AOI):
+Mumbai region defined using latitude–longitude bounds
+(72.79°E–73.18°E, 18.82°N–19.23°N)
+- Baseline Creation:
+ 2020 mangrove map used as reference
+- Output Generated:
+ • Area statistics (CSV)
+ • Mangrove polygons (GeoJSON) for map visualization
+
 
 ## Project Structure
 ```
@@ -69,6 +82,11 @@ http://localhost:8501
 - The dashboard reads its datasets from the `data/` folder automatically.
 - For the real mangrove map, place `mumbai_mangrove_geometry.geojson` or `mumbai_mangrove_geometry.csv` inside `data/`.
 - Run the command from the project root directory.
+
+## Deployment
+
+### Streamlit Community Cloud
+Deployed link: http://greensetu.streamlit.app 
 
 ## SDG Alignment
 - SDG 11: Sustainable Cities & Communities
