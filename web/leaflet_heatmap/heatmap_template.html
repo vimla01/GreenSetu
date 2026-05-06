@@ -3,7 +3,7 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
-__LEAFLET_CUSTOM_CSS__
+/* __LEAFLET_CUSTOM_CSS__ */
 </style>
 
 <div class="leaflet-heatmap-shell">
@@ -63,12 +63,12 @@ __LEAFLET_CUSTOM_CSS__
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
-window.__MUMBAI_HEATMAP_POINTS__ = __HEATMAP_POINTS__;
-window.__MUMBAI_HEATMAP_CENTER__ = __HEATMAP_CENTER__;
-window.__MUMBAI_HEATMAP_BOUNDS__ = __HEATMAP_BOUNDS__;
-window.__MUMBAI_MAP_FEATURES__ = __MAP_FEATURES__;
-window.__MUMBAI_MAP_METADATA__ = __MAP_METADATA__;
+window.__MUMBAI_HEATMAP_POINTS__ = /* __HEATMAP_POINTS__ */ [];
+window.__MUMBAI_HEATMAP_CENTER__ = /* __HEATMAP_CENTER__ */ null;
+window.__MUMBAI_HEATMAP_BOUNDS__ = /* __HEATMAP_BOUNDS__ */ null;
+window.__MUMBAI_MAP_FEATURES__ = /* __MAP_FEATURES__ */ {"type":"FeatureCollection","features":[]};
+window.__MUMBAI_MAP_METADATA__ = /* __MAP_METADATA__ */ {};
 </script>
 <script>
-__LEAFLET_CUSTOM_JS__
+/* __LEAFLET_CUSTOM_JS__ */
 </script>

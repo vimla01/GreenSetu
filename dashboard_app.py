@@ -625,13 +625,13 @@ def build_leaflet_heatmap_html(points, center, bounds, zone_summary, focus_locat
 
     return (
         template
-        .replace("__LEAFLET_CUSTOM_CSS__", css_text)
-        .replace("__LEAFLET_CUSTOM_JS__", js_text)
-        .replace("__HEATMAP_POINTS__", json_for_inline_script(points))
-        .replace("__HEATMAP_CENTER__", json_for_inline_script(center))
-        .replace("__HEATMAP_BOUNDS__", json_for_inline_script(bounds))
-        .replace("__MAP_FEATURES__", json_for_inline_script(map_features))
-        .replace("__MAP_METADATA__", json_for_inline_script(metadata))
+        .replace("/* __LEAFLET_CUSTOM_CSS__ */", css_text)
+        .replace("/* __LEAFLET_CUSTOM_JS__ */", js_text)
+        .replace("/* __HEATMAP_POINTS__ */ []", json_for_inline_script(points))
+        .replace("/* __HEATMAP_CENTER__ */ null", json_for_inline_script(center))
+        .replace("/* __HEATMAP_BOUNDS__ */ null", json_for_inline_script(bounds))
+        .replace('/* __MAP_FEATURES__ */ {"type":"FeatureCollection","features":[]}', json_for_inline_script(map_features))
+        .replace("/* __MAP_METADATA__ */ {}", json_for_inline_script(metadata))
     )
 
 a2020 = df['mangrove_area_sq_km'].iloc[0]
