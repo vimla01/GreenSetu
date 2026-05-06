@@ -46,7 +46,7 @@
     setNodeText(layerStatusNode, text);
   }
 
-  function renderZoneChips(zoneSummary, focusLocations) {
+  function renderZoneChips(zoneSummary, focusLocations, onZoneSelect, activeZoneName) {
     if (!zoneChipsNode) {
       return;
     }
@@ -76,8 +76,14 @@
       }
 
       const count = Number.isFinite(zone.count) ? zone.count : null;
-      const chip = document.createElement("span");
+      if (count === 0) {
+        return;
+      }
+      const chip = document.createElement(onZoneSelect ? "button" : "span");
       chip.className = "leaflet-zone-chip";
+      if (onZoneSelect) {
+        chip.type = "button";
+      }
 
       if (count !== null && count > 0) {
         chip.classList.add("has-data");
@@ -85,8 +91,17 @@
       if (count !== null && maxCount > 0 && count >= maxCount * 0.72) {
         chip.classList.add("is-hot");
       }
+      if (activeZoneName && zone.name === activeZoneName) {
+        chip.classList.add("is-active");
+      }
 
       chip.textContent = count !== null ? zone.name + " (" + count + ")" : zone.name;
+      if (onZoneSelect) {
+        chip.title = "Zoom to " + zone.name;
+        chip.onclick = function () {
+          onZoneSelect(zone);
+        };
+      }
       zoneChipsNode.appendChild(chip);
     });
   }
@@ -319,7 +334,11 @@
           count: Number.isFinite(zone.count) ? zone.count : 0,
           avgNdvi: Number.isFinite(zone.avg_ndvi) ? zone.avg_ndvi : null,
           centerLat: Number.isFinite(zone.center_lat) ? zone.center_lat : null,
-          centerLng: Number.isFinite(zone.center_lng) ? zone.center_lng : null
+          centerLng: Number.isFinite(zone.center_lng) ? zone.center_lng : null,
+          south: Number.isFinite(zone.south) ? zone.south : null,
+          west: Number.isFinite(zone.west) ? zone.west : null,
+          north: Number.isFinite(zone.north) ? zone.north : null,
+          east: Number.isFinite(zone.east) ? zone.east : null
         };
       });
   }
@@ -539,6 +558,12 @@
     if (props.zone) {
       lines.push("Zone: " + props.zone);
     }
+    if (props.sample_count !== undefined) {
+      lines.push("Dense samples: " + props.sample_count);
+    }
+    if (props.avg_ndvi !== undefined && props.avg_ndvi !== null) {
+      lines.push("Avg NDVI: " + Number(props.avg_ndvi).toFixed(3));
+    }
 
     return lines.join("<br>");
   }
@@ -549,7 +574,7 @@
         return {
           color: "#0c6548",
           weight: 1.2,
-          opacity: 0.95,
+          opacity: 0.98,
           fillColor: "#27a36b",
           fillOpacity: 0.48
         };
@@ -580,15 +605,15 @@
   function addMangrovePoints(map, points) {
     return L.layerGroup(
       points.map(function (point) {
-        const radius = 3 + point.weight * 4.5;
+        const radius = 2.2 + point.weight * 2.8;
         const color = getPointColor(point.weight);
         return L.circleMarker([point.lat, point.lng], {
           radius: radius,
           color: "#ffffff",
-          weight: 1.1,
+          weight: 0.8,
           fillColor: color,
-          fillOpacity: 0.88,
-          opacity: 0.92
+          fillOpacity: 0.82,
+          opacity: 0.88
         }).bindTooltip(
           "<strong>" +
             point.zone +
@@ -698,11 +723,11 @@
     const validPoints = normalizePoints(rawPoints);
     const zoneSummary = normalizeZoneSummary(metadata.zoneSummary);
     const focusLocations = Array.isArray(metadata.focusLocations) ? metadata.focusLocations : [];
-    const hasRealGeometry = featureCollection.features.length > 0;
-    const dataMode = metadata.dataMode || (hasRealGeometry ? "real_geometry" : "ndvi_heatmap");
+    const hasGeometry = featureCollection.features.length > 0;
+    const dataMode = metadata.dataMode || (hasGeometry ? "real_geometry" : "ndvi_heatmap");
     const heatMode = dataMode === "ndvi_heatmap" || dataMode === "focus_density_heatmap";
     const heatControlState = {
-      available: heatMode && !hasRealGeometry && typeof L.heatLayer === "function",
+      available: heatMode && validPoints.length > 0 && typeof L.heatLayer === "function",
       gradientIndex: 0,
       layer: null,
       map: null,
@@ -717,7 +742,7 @@
     setHeatControlsVisible(heatControlState.available);
     syncHeatControlLabels(heatControlState);
 
-    if (!hasRealGeometry && !validPoints.length) {
+    if (!hasGeometry && !validPoints.length) {
       fail("No mangrove geometry or preview points are available for this map.");
       return;
     }
@@ -738,26 +763,44 @@
 
     const baseLayers = getBaseLayers();
     let activeBase = "Map";
+    let activeZoneName = null;
     activeBase = toggleBaseLayer(map, baseLayers, activeBase, null);
     defaultCenterView(map);
 
     const payloadBounds = getBoundsFromPayload();
-    let displayLayer = null;
-    let hotspotLayer = null;
-    if (hasRealGeometry) {
-      displayLayer = addMangroveGeometry(map, featureCollection);
+    let geometryLayer = null;
+    let pointFallbackLayer = null;
+    if (hasGeometry) {
+      geometryLayer = addMangroveGeometry(map, featureCollection);
     } else if (!heatMode || !heatControlState.available) {
-      displayLayer = addMangrovePoints(map, validPoints);
+      pointFallbackLayer = addMangrovePoints(map, validPoints);
     }
 
-    if (dataMode === "focus_density_heatmap") {
-      hotspotLayer = addZoneHotspotMarkers(map, zoneSummary);
-    }
+    const showPointFallback = function () {
+      if (hasGeometry) {
+        return;
+      }
+      if (!pointFallbackLayer) {
+        pointFallbackLayer = addMangrovePoints(map, validPoints);
+      } else if (!map.hasLayer(pointFallbackLayer)) {
+        pointFallbackLayer.addTo(map);
+      }
+      if (pointFallbackLayer.bringToFront) {
+        pointFallbackLayer.bringToFront();
+      }
+    };
+
+    const hidePointFallback = function () {
+      if (pointFallbackLayer && map.hasLayer(pointFallbackLayer)) {
+        map.removeLayer(pointFallbackLayer);
+      }
+    };
 
     const refreshHeatLayer = function () {
       syncHeatControlLabels(heatControlState);
 
       if (!heatControlState.available) {
+        showPointFallback();
         return true;
       }
 
@@ -767,9 +810,12 @@
       heatControlState.layer = null;
 
       if (!heatControlState.visible) {
-        setStatus("Heatmap hidden");
+        showPointFallback();
+        setStatus(hasGeometry ? "Heatmap hidden" : "Sample dots active");
         return true;
       }
+
+      hidePointFallback();
 
       try {
         heatControlState.layer = addNdviLossHeat(
@@ -781,9 +827,6 @@
         if (heatControlState.layer && heatControlState.layer.bringToFront) {
           heatControlState.layer.bringToFront();
         }
-        if (hotspotLayer && hotspotLayer.bringToFront) {
-          hotspotLayer.bringToFront();
-        }
         setStatus("Heatmap active");
         return true;
       } catch (error) {
@@ -792,9 +835,7 @@
         setHeatControlsVisible(false);
         syncHeatControlLabels(heatControlState);
 
-        if (!displayLayer) {
-          displayLayer = addMangrovePoints(map, validPoints);
-        }
+        showPointFallback();
 
         setMeta(
           "Heat layer could not initialize cleanly, so point fallback is shown from " +
@@ -807,9 +848,41 @@
     };
 
     const initialLayerBounds =
-      (displayLayer && displayLayer.getBounds ? displayLayer.getBounds() : null) ||
-      (hotspotLayer && hotspotLayer.getBounds ? hotspotLayer.getBounds() : null);
+      (geometryLayer && geometryLayer.getBounds ? geometryLayer.getBounds() : null) ||
+      (pointFallbackLayer && pointFallbackLayer.getBounds ? pointFallbackLayer.getBounds() : null);
     const finalBounds = payloadBounds || (initialLayerBounds && initialLayerBounds.isValid && initialLayerBounds.isValid() ? initialLayerBounds : null);
+
+    const zoomToZone = function (zone) {
+      if (!zone) {
+        return;
+      }
+
+      activeZoneName = zone.name || null;
+      renderZoneChips(zoneSummary, focusLocations, zoomToZone, activeZoneName);
+
+      const hasBounds =
+        Number.isFinite(zone.south) &&
+        Number.isFinite(zone.west) &&
+        Number.isFinite(zone.north) &&
+        Number.isFinite(zone.east);
+
+      if (hasBounds) {
+        const zoneBounds = L.latLngBounds(
+          [zone.south, zone.west],
+          [zone.north, zone.east]
+        );
+        map.fitBounds(zoneBounds.pad(0.18));
+        updateSpan(zoneBounds);
+      } else if (Number.isFinite(zone.centerLat) && Number.isFinite(zone.centerLng)) {
+        map.setView([zone.centerLat, zone.centerLng], Math.max(map.getZoom(), 14), {
+          animate: true
+        });
+      }
+
+      setStatus((zone.name || "Selected zone") + " focused");
+    };
+
+    renderZoneChips(zoneSummary, focusLocations, zoomToZone, activeZoneName);
 
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
 
@@ -821,7 +894,22 @@
       map.invalidateSize(true);
     }, 240);
 
-    if (hasRealGeometry) {
+    if (dataMode === "focus_density_heatmap") {
+      const rankedZones = zoneSummary
+        .filter(function (zone) {
+          return zone.count > 0;
+        })
+        .sort(function (left, right) {
+          return right.count - left.count;
+        });
+
+      updateTopStats(validPoints.length, "Dense Samples");
+      setNodeText(zonesLabelNode, "Focused Zones");
+      setNodeText(yearNode, String(rankedZones.length || focusLocations.length || zoneSummary.length || 8));
+      setLegendMode("focus_density_heatmap");
+      setMeta("");
+      setStatus("Preparing heatmap");
+    } else if (hasGeometry) {
       updateTopStats(featureCollection.features.length, "Mapped Features");
       setLegendMode("real_geometry");
       setMeta(
@@ -841,35 +929,6 @@
           " as a mangrove loss heatmap. Red means lower NDVI and likely higher vegetation loss."
       );
       setStatus("Loss heat active");
-    } else if (dataMode === "focus_density_heatmap") {
-      const rankedZones = zoneSummary
-        .filter(function (zone) {
-          return zone.count > 0;
-        })
-        .sort(function (left, right) {
-          return right.count - left.count;
-        });
-      const topZones = rankedZones.slice(0, 3).map(function (zone) {
-        return zone.name + " (" + zone.count + ")";
-      });
-      const threshold = Number.isFinite(metadata.ndviThreshold)
-        ? metadata.ndviThreshold.toFixed(2)
-        : null;
-
-      updateTopStats(validPoints.length, "Dense Samples");
-      setNodeText(zonesLabelNode, "Focused Zones");
-      setNodeText(yearNode, String(focusLocations.length || zoneSummary.length || 8));
-      setLegendMode("focus_density_heatmap");
-      setMeta(
-        "Showing dense mangrove hotspots only for the selected locations" +
-          (threshold ? " (NDVI >= " + threshold + ")" : "") +
-          ". " +
-          (topZones.length
-            ? "Highest density zones: " + topZones.join(", ") + "."
-            : "Use map hover to inspect density by zone.") +
-          " Use the on-map controls to toggle the heat layer or cycle gradient, radius, and opacity presets."
-      );
-      setStatus("Preparing heatmap");
     } else {
       updateTopStats(validPoints.length, "Preview Points");
       setLegendMode("approximate_points");
@@ -882,7 +941,7 @@
     }
 
     const tryAttachHeatLayer = function () {
-      if (displayLayer || hasRealGeometry || !heatMode || !heatControlState.available) {
+      if (!heatMode || !heatControlState.available) {
         return true;
       }
 
@@ -904,7 +963,7 @@
         tryAttachHeatLayer();
 
         if (finalBounds) {
-          map.fitBounds(finalBounds.pad(hasRealGeometry ? 0.04 : 0.09));
+          map.fitBounds(finalBounds.pad(hasGeometry ? 0.04 : 0.09));
           updateSpan(finalBounds);
         } else {
           defaultCenterView(map);
@@ -1015,7 +1074,7 @@
       };
     }
 
-    if (!hasRealGeometry && heatMode && typeof ResizeObserver === "function") {
+    if (heatMode && typeof ResizeObserver === "function") {
       const resizeObserver = new ResizeObserver(function () {
         if (tryAttachHeatLayer()) {
           resizeObserver.disconnect();

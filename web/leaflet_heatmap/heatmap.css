@@ -111,6 +111,7 @@
 }
 
 .leaflet-zone-chip {
+  appearance: none;
   font-family: "Outfit", sans-serif;
   font-size: 12px;
   line-height: 1.2;
@@ -120,6 +121,13 @@
   background: #f7fbf8;
   color: #456045;
   font-weight: 500;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.leaflet-zone-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(18, 36, 18, 0.08);
 }
 
 .leaflet-zone-chip.has-data {
@@ -133,6 +141,13 @@
   background: #fff0df;
   color: #a02b14;
   box-shadow: 0 0 0 1px rgba(240, 169, 101, 0.25), 0 4px 10px rgba(176, 54, 23, 0.14);
+}
+
+.leaflet-zone-chip.is-active {
+  border-color: #1b7f4b;
+  background: #def7e8;
+  color: #11472c;
+  box-shadow: 0 0 0 1px rgba(27, 127, 75, 0.18), 0 8px 18px rgba(27, 127, 75, 0.16);
 }
 
 #leaflet-ndvi-heatmap {
