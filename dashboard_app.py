@@ -180,6 +180,10 @@ section[data-testid="stSidebar"] label { color: var(--text-mid) !important; }
     font-size: 0.82rem; color: var(--text-mid); line-height: 1.65;
     margin-bottom: 1.2rem; max-width: 680px;
 }
+.sec-dsc-wide {
+    max-width: 1120px;
+    margin-bottom: 0.9rem;
+}
 
 /* CALLOUT */
 .callout {
@@ -991,8 +995,8 @@ if st.session_state.page == "dashboard":
         % change. Reveals which metrics are deteriorating fastest and when shifts occurred.</div>""",
         unsafe_allow_html=True)
 
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8a9e8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Focused Mangrove Density Heatmap — Selected Locations Only</div>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size:0.9rem;color:#4a5a4a;margin-bottom:0.8rem;'>This map visualizes only the eight requested Mumbai mangrove locations. Dark orange and red highlight the densest mangrove clusters in the selected regions.</div>", unsafe_allow_html=True)
+        st.markdown('<div class="sec-lbl">Focused Mangrove Density Heatmap — Selected Locations Only</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-dsc sec-dsc-wide">This map visualizes only the eight requested Mumbai mangrove locations with a Google-style heat overlay. Green-to-red intensity highlights the densest mangrove clusters, and the in-map controls let you switch gradient, radius, opacity, and basemap.</div>', unsafe_allow_html=True)
         spatial_points, map_center, map_bounds, total_ndvi_points, zone_summary, focus_locations = load_ndvi_heatmap_points(max_points=3000)
 
         if not spatial_points:
@@ -1004,7 +1008,7 @@ if st.session_state.page == "dashboard":
             else:
                 components.html(leaflet_html, height=780, scrolling=False)
                 st.caption(
-                    f"Heatmap shows {len(spatial_points)} NDVI points filtered to 8 specified mangrove regions. Dense areas render in dark orange/red; low-density areas are lighter yellow." 
+                    f"Heatmap shows {len(spatial_points)} NDVI points filtered to 8 specified mangrove regions. Dense areas intensify from green through yellow to red, with on-map controls for gradient, radius, and opacity."
                 )
 
         st.markdown("<hr>", unsafe_allow_html=True)

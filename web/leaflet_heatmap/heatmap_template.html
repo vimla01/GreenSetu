@@ -1,6 +1,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
 __LEAFLET_CUSTOM_CSS__
 </style>
 
@@ -32,7 +34,6 @@ __LEAFLET_CUSTOM_CSS__
   </div>
 
   <div class="leaflet-map-meta-wrap">
-    <div id="leaflet-heatmap-meta" class="leaflet-heatmap-meta"></div>
     <div id="hm-zone-chips" class="leaflet-zone-chip-wrap" aria-label="Focused mangrove locations"></div>
   </div>
 
@@ -41,13 +42,19 @@ __LEAFLET_CUSTOM_CSS__
       <button id="hm-view-map" type="button" class="is-active">Map</button>
       <button id="hm-view-satellite" type="button">Satellite</button>
     </div>
+    <div id="hm-google-tools" class="leaflet-google-tools" role="group" aria-label="Heatmap controls">
+      <button id="hm-toggle-heat" type="button">Heatmap On</button>
+      <button id="hm-gradient" type="button">Gradient Google</button>
+      <button id="hm-radius" type="button">Radius Balanced</button>
+      <button id="hm-opacity" type="button">Opacity Balanced</button>
+    </div>
     <div id="leaflet-ndvi-heatmap"></div>
     <div id="hm-layer-status" class="leaflet-map-badge">Loading map...</div>
   </div>
 
   <div class="leaflet-heatmap-legend" aria-hidden="true">
     <span id="hm-legend-left">Mangrove extent</span>
-    <div class="leaflet-heatmap-gradient"></div>
+    <div id="hm-legend-gradient" class="leaflet-heatmap-gradient"></div>
     <span id="hm-legend-right">Selected layer</span>
   </div>
 </div>

@@ -17,9 +17,16 @@
   const legendLeftNode = document.getElementById("hm-legend-left");
   const legendRightNode = document.getElementById("hm-legend-right");
   const zoneChipsNode = document.getElementById("hm-zone-chips");
+  const legendGradientNode = document.getElementById("hm-legend-gradient");
+  const mapStageNode = document.querySelector(".leaflet-map-stage");
 
   const mapButton = document.getElementById("hm-view-map");
   const satelliteButton = document.getElementById("hm-view-satellite");
+  const googleToolsNode = document.getElementById("hm-google-tools");
+  const heatToggleButton = document.getElementById("hm-toggle-heat");
+  const gradientButton = document.getElementById("hm-gradient");
+  const radiusButton = document.getElementById("hm-radius");
+  const opacityButton = document.getElementById("hm-opacity");
 
   if (!mapNode) {
     return;
@@ -159,6 +166,62 @@
     setNodeText(legendRightNode, "High intensity");
   }
 
+  function setHeatControlsVisible(isVisible) {
+    if (googleToolsNode) {
+      googleToolsNode.hidden = !isVisible;
+    }
+  }
+
+  function setHeatButtonState(button, label, isActive, isEnabled) {
+    if (!button) {
+      return;
+    }
+
+    button.textContent = label;
+    button.disabled = !isEnabled;
+    button.classList.toggle("is-active", Boolean(isActive && isEnabled));
+  }
+
+  function syncHeatControlLabels(state) {
+    const gradients = getHeatGradientPresets(state.mode);
+    const radii = getHeatRadiusPresets(state.mode);
+    const opacities = getHeatOpacityPresets();
+
+    const activeGradient = gradients[state.gradientIndex] || gradients[0];
+    const activeRadius = radii[state.radiusIndex] || radii[0];
+    const activeOpacity = opacities[state.opacityIndex] || opacities[0];
+    const isEnabled = Boolean(state.available);
+
+    setHeatButtonState(
+      heatToggleButton,
+      state.visible ? "Heatmap On" : "Heatmap Off",
+      state.visible,
+      isEnabled
+    );
+    setHeatButtonState(
+      gradientButton,
+      "Gradient " + activeGradient.name,
+      state.visible,
+      isEnabled
+    );
+    setHeatButtonState(
+      radiusButton,
+      "Radius " + activeRadius.name,
+      state.visible,
+      isEnabled
+    );
+    setHeatButtonState(
+      opacityButton,
+      "Opacity " + activeOpacity.name,
+      state.visible,
+      isEnabled
+    );
+
+    if (isEnabled) {
+      setLegendGradient(activeGradient.gradient);
+    }
+  }
+
   function clearExistingMap() {
     if (window.__MUMBAI_LEAFLET_MAP__) {
       try {
@@ -182,6 +245,9 @@
     }
     if (satelliteButton) {
       satelliteButton.classList.toggle("is-active", viewName === "Satellite");
+    }
+    if (mapStageNode) {
+      mapStageNode.classList.toggle("is-satellite", viewName === "Satellite");
     }
     setNodeText(modeNode, viewName);
   }
@@ -286,18 +352,126 @@
 
   function getDensityGradient() {
     return {
-      0.1: "#fff4bf",
-      0.32: "#ffd27d",
-      0.55: "#ff9f43",
-      0.76: "#ef5f2f",
-      1.0: "#b91622"
+      0.12: "#00c853",
+      0.34: "#9be15d",
+      0.56: "#ffe66d",
+      0.78: "#ff8a3d",
+      1.0: "#ff1744"
     };
+  }
+
+  function getFocusDensityGradientPresets() {
+    return [
+      {
+        name: "Google",
+        gradient: getDensityGradient()
+      },
+      {
+        name: "Hotspot",
+        gradient: {
+          0.1: "#fff4bf",
+          0.32: "#ffd27d",
+          0.55: "#ff9f43",
+          0.76: "#ef5f2f",
+          1.0: "#b91622"
+        }
+      },
+      {
+        name: "Mangrove",
+        gradient: {
+          0.12: "#dff6c7",
+          0.34: "#8fd06d",
+          0.56: "#28a26c",
+          0.78: "#f4a43b",
+          1.0: "#d83f2b"
+        }
+      }
+    ];
+  }
+
+  function getHeatGradientPresets(mode) {
+    if (mode === "focus_density_heatmap") {
+      return getFocusDensityGradientPresets();
+    }
+
+    return [
+      {
+        name: "Loss",
+        gradient: getLossGradient()
+      },
+      {
+        name: "Google",
+        gradient: getDensityGradient()
+      },
+      {
+        name: "Contrast",
+        gradient: {
+          0.1: "#113b7a",
+          0.38: "#3ca4d8",
+          0.62: "#f9e06a",
+          0.82: "#f08c2e",
+          1.0: "#d63b31"
+        }
+      }
+    ];
+  }
+
+  function getHeatRadiusPresets(mode) {
+    if (mode === "focus_density_heatmap") {
+      return [
+        { name: "Narrow", radius: 18, blur: 16 },
+        { name: "Balanced", radius: 24, blur: 22 },
+        { name: "Wide", radius: 30, blur: 28 }
+      ];
+    }
+
+    return [
+      { name: "Fine", radius: 14, blur: 12 },
+      { name: "Balanced", radius: 18, blur: 16 },
+      { name: "Wide", radius: 24, blur: 20 }
+    ];
+  }
+
+  function getHeatOpacityPresets() {
+    return [
+      { name: "Soft", minOpacity: 0.24 },
+      { name: "Balanced", minOpacity: 0.4 },
+      { name: "Bold", minOpacity: 0.56 }
+    ];
+  }
+
+  function gradientToCss(gradient) {
+    if (!gradient) {
+      return "";
+    }
+
+    return (
+      "linear-gradient(90deg, " +
+      Object.keys(gradient)
+        .map(function (stop) {
+          return { stop: Number(stop), color: gradient[stop] };
+        })
+        .sort(function (left, right) {
+          return left.stop - right.stop;
+        })
+        .map(function (entry) {
+          return entry.color + " " + Math.round(entry.stop * 100) + "%";
+        })
+        .join(", ") +
+      ")"
+    );
+  }
+
+  function setLegendGradient(gradient) {
+    if (legendGradientNode) {
+      legendGradientNode.style.background = gradientToCss(gradient);
+    }
   }
 
   function getBaseLayers() {
     return {
       Map: [
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
           subdomains: "abcd",
           maxZoom: 20,
           attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
@@ -430,22 +604,30 @@
     ).addTo(map);
   }
 
-  function addNdviLossHeat(map, points, mode) {
+  function addNdviLossHeat(map, points, mode, styleState) {
     if (typeof L.heatLayer !== "function") {
       return addMangrovePoints(map, points);
     }
 
-    const isFocusDensityMode = mode === "focus_density_heatmap";
     const heatData = points.map(function (point) {
       return [point.lat, point.lng, point.weight];
     });
+    const gradients = getHeatGradientPresets(mode);
+    const radii = getHeatRadiusPresets(mode);
+    const opacities = getHeatOpacityPresets();
+    const activeGradient =
+      gradients[(styleState && styleState.gradientIndex) || 0] || gradients[0];
+    const activeRadius =
+      radii[(styleState && styleState.radiusIndex) || 0] || radii[0];
+    const activeOpacity =
+      opacities[(styleState && styleState.opacityIndex) || 0] || opacities[0];
 
     return L.heatLayer(heatData, {
-      radius: isFocusDensityMode ? 24 : 16,
-      blur: isFocusDensityMode ? 22 : 14,
+      radius: activeRadius.radius,
+      blur: activeRadius.blur,
       maxZoom: 17,
-      minOpacity: isFocusDensityMode ? 0.5 : 0.32,
-      gradient: isFocusDensityMode ? getDensityGradient() : getLossGradient()
+      minOpacity: activeOpacity.minOpacity,
+      gradient: activeGradient.gradient
     }).addTo(map);
   }
 
@@ -519,8 +701,21 @@
     const hasRealGeometry = featureCollection.features.length > 0;
     const dataMode = metadata.dataMode || (hasRealGeometry ? "real_geometry" : "ndvi_heatmap");
     const heatMode = dataMode === "ndvi_heatmap" || dataMode === "focus_density_heatmap";
+    const heatControlState = {
+      available: heatMode && !hasRealGeometry && typeof L.heatLayer === "function",
+      gradientIndex: 0,
+      layer: null,
+      map: null,
+      mode: dataMode,
+      opacityIndex: 1,
+      points: validPoints,
+      radiusIndex: 1,
+      visible: true
+    };
 
     renderZoneChips(zoneSummary, focusLocations);
+    setHeatControlsVisible(heatControlState.available);
+    syncHeatControlLabels(heatControlState);
 
     if (!hasRealGeometry && !validPoints.length) {
       fail("No mangrove geometry or preview points are available for this map.");
@@ -538,6 +733,7 @@
       zoomSnap: 0.25
     });
     window.__MUMBAI_LEAFLET_MAP__ = map;
+    heatControlState.map = map;
     map.zoomControl.setPosition("topright");
 
     const baseLayers = getBaseLayers();
@@ -550,13 +746,65 @@
     let hotspotLayer = null;
     if (hasRealGeometry) {
       displayLayer = addMangroveGeometry(map, featureCollection);
-    } else if (!heatMode) {
+    } else if (!heatMode || !heatControlState.available) {
       displayLayer = addMangrovePoints(map, validPoints);
     }
 
     if (dataMode === "focus_density_heatmap") {
       hotspotLayer = addZoneHotspotMarkers(map, zoneSummary);
     }
+
+    const refreshHeatLayer = function () {
+      syncHeatControlLabels(heatControlState);
+
+      if (!heatControlState.available) {
+        return true;
+      }
+
+      if (heatControlState.layer && map.hasLayer(heatControlState.layer)) {
+        map.removeLayer(heatControlState.layer);
+      }
+      heatControlState.layer = null;
+
+      if (!heatControlState.visible) {
+        setStatus("Heatmap hidden");
+        return true;
+      }
+
+      try {
+        heatControlState.layer = addNdviLossHeat(
+          map,
+          heatControlState.points,
+          heatControlState.mode,
+          heatControlState
+        );
+        if (heatControlState.layer && heatControlState.layer.bringToFront) {
+          heatControlState.layer.bringToFront();
+        }
+        if (hotspotLayer && hotspotLayer.bringToFront) {
+          hotspotLayer.bringToFront();
+        }
+        setStatus("Heatmap active");
+        return true;
+      } catch (error) {
+        heatControlState.available = false;
+        heatControlState.visible = false;
+        setHeatControlsVisible(false);
+        syncHeatControlLabels(heatControlState);
+
+        if (!displayLayer) {
+          displayLayer = addMangrovePoints(map, validPoints);
+        }
+
+        setMeta(
+          "Heat layer could not initialize cleanly, so point fallback is shown from " +
+            (metadata.sourceName || "Mumbai_NDVI_CSV.csv") +
+            "."
+        );
+        setStatus("Point fallback");
+        return true;
+      }
+    };
 
     const initialLayerBounds =
       (displayLayer && displayLayer.getBounds ? displayLayer.getBounds() : null) ||
@@ -618,9 +866,10 @@
           ". " +
           (topZones.length
             ? "Highest density zones: " + topZones.join(", ") + "."
-            : "Use map hover to inspect density by zone.")
+            : "Use map hover to inspect density by zone.") +
+          " Use the on-map controls to toggle the heat layer or cycle gradient, radius, and opacity presets."
       );
-      setStatus("Dense hotspot mode");
+      setStatus("Preparing heatmap");
     } else {
       updateTopStats(validPoints.length, "Preview Points");
       setLegendMode("approximate_points");
@@ -633,7 +882,7 @@
     }
 
     const tryAttachHeatLayer = function () {
-      if (displayLayer || hasRealGeometry || !heatMode) {
+      if (displayLayer || hasRealGeometry || !heatMode || !heatControlState.available) {
         return true;
       }
 
@@ -642,19 +891,11 @@
         return false;
       }
 
-      try {
-        displayLayer = addNdviLossHeat(map, validPoints, dataMode);
-      } catch (error) {
-        displayLayer = addMangrovePoints(map, validPoints);
-        setMeta(
-          "Heat layer could not initialize cleanly, so point fallback is shown from " +
-            (metadata.sourceName || "Mumbai_NDVI_CSV.csv") +
-            "."
-        );
-        setStatus("Point fallback");
+      if (heatControlState.layer || !heatControlState.visible) {
+        return true;
       }
 
-      return true;
+      return refreshHeatLayer();
     };
 
     const finalizeLayoutWhenReady = function (attempt) {
@@ -669,6 +910,16 @@
           defaultCenterView(map);
           updateSpan(null);
         }
+
+        if (!heatMode) {
+          setStatus("Map ready");
+        } else if (!heatControlState.available) {
+          setStatus("Point fallback");
+        } else if (!heatControlState.visible) {
+          setStatus("Heatmap hidden");
+        } else {
+          setStatus("Heatmap active");
+        }
         return;
       }
 
@@ -679,7 +930,15 @@
         } else {
           updateSpan(null);
         }
-        setStatus("Map ready");
+        if (!heatMode) {
+          setStatus("Map ready");
+        } else if (!heatControlState.available) {
+          setStatus("Point fallback");
+        } else if (!heatControlState.visible) {
+          setStatus("Heatmap hidden");
+        } else {
+          setStatus("Heatmap active");
+        }
         return;
       }
 
@@ -704,6 +963,55 @@
           return;
         }
         activeBase = toggleBaseLayer(map, baseLayers, "Satellite", activeBase);
+      };
+    }
+
+    if (heatToggleButton) {
+      heatToggleButton.onclick = function () {
+        if (!heatControlState.available) {
+          return;
+        }
+
+        heatControlState.visible = !heatControlState.visible;
+        refreshHeatLayer();
+      };
+    }
+
+    if (gradientButton) {
+      gradientButton.onclick = function () {
+        const gradients = getHeatGradientPresets(heatControlState.mode);
+        if (!heatControlState.available || !gradients.length) {
+          return;
+        }
+
+        heatControlState.gradientIndex =
+          (heatControlState.gradientIndex + 1) % gradients.length;
+        refreshHeatLayer();
+      };
+    }
+
+    if (radiusButton) {
+      radiusButton.onclick = function () {
+        const radii = getHeatRadiusPresets(heatControlState.mode);
+        if (!heatControlState.available || !radii.length) {
+          return;
+        }
+
+        heatControlState.radiusIndex = (heatControlState.radiusIndex + 1) % radii.length;
+        refreshHeatLayer();
+      };
+    }
+
+    if (opacityButton) {
+      opacityButton.onclick = function () {
+        const opacities = getHeatOpacityPresets();
+        if (!heatControlState.available || !opacities.length) {
+          return;
+        }
+
+        heatControlState.opacityIndex =
+          (heatControlState.opacityIndex + 1) % opacities.length;
+        refreshHeatLayer();
       };
     }
 
